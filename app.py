@@ -220,10 +220,23 @@ def parse_all_stats(game_data: dict) -> dict:
     plays = game_data.get("plays") or []
     player_lookup = build_player_lookup(game_data)
     player_team = build_player_team_lookup(game_data)
+    goalie_set = build_goalie_set(game_data)
 
     skater_stats: dict = {}
     goalie_stats: dict = {}
     fo_stats: dict = {}
+
+    # Pre-populate every dressed player with zeros so the full roster always shows
+    for spot in game_data.get("rosterSpots") or []:
+        pid = spot.get("playerId")
+        if not pid:
+            continue
+        name = player_lookup.get(pid, f"ID {pid}")
+        team = player_team.get(pid, "UNK")
+        if pid in goalie_set:
+            goalie_stats[pid] = {"name": name, "team": team, "shots_against": 0, "goals_allowed": 0}
+        else:
+            skater_stats[pid] = {"name": name, "team": team, "goals": 0, "assists": 0, "points": 0, "sog": 0}
     skater_shot_attr: dict = {}
     goalie_shot_attr: dict = {}
     goal_attr: dict = {}
