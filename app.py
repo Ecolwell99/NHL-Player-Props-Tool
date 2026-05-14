@@ -1120,8 +1120,13 @@ Correction types detected:
 </div>
 """, unsafe_allow_html=True)
 
-            st.markdown('<div style="font-size:11px; font-weight:700; letter-spacing:0.08em; opacity:0.5; margin-bottom:4px; text-transform:uppercase;">Example</div>', unsafe_allow_html=True)
-            warning_box("⚠ SOG RE-ATTRIBUTED: P2 14:22 — Auston Matthews → William Nylander", "alert")
+            st.markdown(
+                '<div style="font-size:11px; font-weight:700; letter-spacing:0.08em; opacity:0.5; margin-bottom:4px; text-transform:uppercase;">Example</div>'
+                '<div style="margin-bottom:18px; padding:10px 16px; border-radius:10px; font-size:14px; font-weight:700; '
+                'background-color:#3a1600; color:#ffd966; border:2px solid #ff9900;">'
+                '⚠ SOG RE-ATTRIBUTED: P2 14:22 — Auston Matthews → William Nylander</div>',
+                unsafe_allow_html=True,
+            )
 
             st.markdown("""
 <div style='font-size:15px; line-height:1.7;'>
