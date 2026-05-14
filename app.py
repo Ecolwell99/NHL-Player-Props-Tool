@@ -663,16 +663,19 @@ _STAT_COL_MAP = {"G": "goals", "A": "assists", "PTS": "points", "SOG": "sog", "S
 
 
 def sort_bar(table_id: str, columns: list[str], name_col: str = "Player"):
-    """Renders a compact sort button row. Returns the current sort column."""
+    """Renders a compact sort dropdown. Returns the current sort column."""
     all_cols = [name_col] + columns
     current = st.session_state.get(f"sort_{table_id}", name_col)
-    cols = st.columns(len(all_cols))
-    for i, col in enumerate(all_cols):
-        label = f"↑ {col}" if current == col and col != name_col else col
-        if cols[i].button(label, key=f"sort_{table_id}_{col}", use_container_width=True):
-            st.session_state[f"sort_{table_id}"] = col
-            current = col
-    return current
+    idx = all_cols.index(current) if current in all_cols else 0
+    chosen = st.selectbox(
+        "Sort by",
+        options=all_cols,
+        index=idx,
+        key=f"sort_{table_id}_select",
+        label_visibility="collapsed",
+    )
+    st.session_state[f"sort_{table_id}"] = chosen
+    return chosen
 
 
 def apply_sort(rows: list[dict], sort_col: str, name_col: str = "Player") -> list[dict]:
@@ -1055,7 +1058,7 @@ Live player stats pulled from the NHL play-by-play API, rebuilt from scratch eve
 - **Goalies** — Saves (shots against minus goals allowed). Goalies only appear once they have recorded at least one save — the PBP feed has no way to identify who is in net until a shot is registered against them.
 - **Team filter** — switch between All, Away, and Home
 - **Cell flash** — a stat cell turns <span style='background:rgba(0,200,80,0.30); padding:1px 7px; border-radius:4px; font-weight:700;'>green</span> when a value increases and <span style='background:rgba(220,30,30,0.30); padding:1px 7px; border-radius:4px; font-weight:700;'>red</span> when it decreases. Flash lasts 10 seconds then clears automatically. This fires on both legitimate new stats and corrections. Applies to G, A, PTS, and SOG columns.
-- **Sort bar** — compact buttons next to each table header. Click a stat column (G, A, PTS, SOG) to sort descending; click again or click Player to reset to alphabetical by last name.
+- **Sort by** — dropdown next to each table header. Pick a stat column (G, A, PTS, SOG) to sort descending, or select Player to reset to alphabetical by last name.
 
 ---
 
@@ -1066,7 +1069,7 @@ Faceoffs taken, won, and win % per player, sourced from faceoff events in the pl
 - Player IDs on faceoff events are not always populated by the NHL API mid-game — rows will appear as data becomes available
 - Same team filter applies
 - **Cell flash** — same <span style='background:rgba(0,200,80,0.30); padding:1px 7px; border-radius:4px; font-weight:700;'>green</span> / <span style='background:rgba(220,30,30,0.30); padding:1px 7px; border-radius:4px; font-weight:700;'>red</span> flash applies to FO Taken and FO Won columns
-- **Sort bar** — sort by FO Taken or FO Won descending, or reset to alphabetical by last name
+- **Sort by** — dropdown to sort by FO Taken or FO Won descending, or reset to alphabetical by last name
 
 ---
 
