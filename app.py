@@ -698,13 +698,14 @@ try:
     active_only = st.session_state.active_only
     team_filter = st.session_state.team_filter
 
+    # Warning and team filter rendered once, above all tabs
+    warning_box(st.session_state.warning_message, st.session_state.warning_type)
+    team_filter_buttons(away_abbrev, home_abbrev, key_prefix="tf")
+
     # -----------------------------------------------------------------------
     # Tab 1: Boxscore
     # -----------------------------------------------------------------------
     with tab_box:
-        warning_box(st.session_state.warning_message, st.session_state.warning_type)
-        team_filter_buttons(away_abbrev, home_abbrev, key_prefix="tf_box")
-
         # Skaters
         section_header("Skaters — G / A / PTS / SOG")
         skater_rows = []
@@ -750,9 +751,6 @@ try:
     # Tab 2: Faceoffs
     # -----------------------------------------------------------------------
     with tab_fo:
-        warning_box(st.session_state.warning_message, st.session_state.warning_type)
-        team_filter_buttons(away_abbrev, home_abbrev, key_prefix="tf_fo")
-
         section_header("Faceoffs — Taken / Won / Win%")
         fo_rows = []
         for pid, f in parsed["fo_stats"].items():
@@ -833,11 +831,9 @@ except RateLimitedError:
     st.session_state.warning_message = "⚠ RATE LIMITED — retrying next tick"
     st.session_state.warning_type = "alert"
     st.session_state.alert_shown_until = time.time() + 15
-    with tab_box:
-        warning_box(st.session_state.warning_message, st.session_state.warning_type)
+    warning_box(st.session_state.warning_message, st.session_state.warning_type)
 except Exception as e:
-    with tab_box:
-        st.error(f"Refresh error: {e}")
+    st.error(f"Refresh error: {e}")
 
 time.sleep(REFRESH_SECS)
 st.rerun()
