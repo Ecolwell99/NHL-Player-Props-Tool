@@ -672,16 +672,16 @@ try:
     # -----------------------------------------------------------------------
     with tab_box:
         warning_box(st.session_state.warning_message, st.session_state.warning_type)
-        col_away, col_home, col_all = st.columns(3)
+        col_all, col_away, col_home = st.columns(3)
+        with col_all:
+            if st.button("All Players", use_container_width=True, key="box_all"):
+                st.session_state.team_filter = "All"
         with col_away:
             if st.button(f"{away_abbrev} (Away)", use_container_width=True, key="box_away"):
                 st.session_state.team_filter = away_abbrev
         with col_home:
             if st.button(f"{home_abbrev} (Home)", use_container_width=True, key="box_home"):
                 st.session_state.team_filter = home_abbrev
-        with col_all:
-            if st.button("All Players", use_container_width=True, key="box_all"):
-                st.session_state.team_filter = "All"
 
         section_header("Skaters — G / A / PTS / SOG")
         skater_rows = []
@@ -727,16 +727,16 @@ try:
     # -----------------------------------------------------------------------
     with tab_fo:
         warning_box(st.session_state.warning_message, st.session_state.warning_type)
-        col_away, col_home, col_all = st.columns(3)
+        col_all, col_away, col_home = st.columns(3)
+        with col_all:
+            if st.button("All Players", use_container_width=True, key="fo_all"):
+                st.session_state.team_filter = "All"
         with col_away:
             if st.button(f"{away_abbrev} (Away)", use_container_width=True, key="fo_away"):
                 st.session_state.team_filter = away_abbrev
         with col_home:
             if st.button(f"{home_abbrev} (Home)", use_container_width=True, key="fo_home"):
                 st.session_state.team_filter = home_abbrev
-        with col_all:
-            if st.button("All Players", use_container_width=True, key="fo_all"):
-                st.session_state.team_filter = "All"
 
         section_header("Faceoffs — Taken / Won / Win%")
         fo_rows = []
