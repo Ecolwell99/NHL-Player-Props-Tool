@@ -848,10 +848,12 @@ def render_live():
 
         now_str = datetime.now(ZoneInfo("America/New_York")).strftime("%I:%M:%S %p ET")
         player_team = build_player_team_lookup(game_data)
+        game_state = str(game_data.get("gameState", "")).upper()
+        is_live = game_state in {"LIVE", "CRIT"}
 
         alerts = []
         deltas = []
-        if not st.session_state.is_first_tick:
+        if is_live and not st.session_state.is_first_tick:
             prev_snapshot = {
                 "prev_skater_shot_attr": st.session_state.prev_skater_shot_attr,
                 "prev_goalie_shot_attr": st.session_state.prev_goalie_shot_attr,
@@ -888,8 +890,8 @@ def render_live():
         st.session_state.prev_goal_attr = parsed["goal_attr"]
         st.session_state.prev_fo_attr = parsed["fo_attr"]
 
-        # Stat flash — diff totals and merge new flashes into session state
-        if not st.session_state.is_first_tick:
+        # Stat flash — only diff and flash for live games
+        if is_live and not st.session_state.is_first_tick:
             new_flashes = diff_stat_totals(parsed, st.session_state.prev_stat_totals, time.time())
             for player, cols in new_flashes.items():
                 if player not in st.session_state.stat_flash:
