@@ -889,6 +889,8 @@ def render_live():
                 if team_filter != "All" and g["team"] != team_filter:
                     continue
                 saves = g["shots_against"] - g["goals_allowed"]
+                if saves == 0:
+                    continue
                 goalie_rows.append({
                     "Goalie": g["name"],
                     "Team": g["team"],
