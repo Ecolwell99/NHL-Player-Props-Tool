@@ -692,7 +692,8 @@ def html_table(rows: list[dict], color_mode: bool = False, team_col: str = "Team
     player_col = "Player" if "Player" in headers else ("Goalie" if "Goalie" in headers else None)
     th = "".join(
         f'<th style="padding:6px 12px; text-align:left; border-bottom:2px solid var(--secondary-background-color); '
-        f'font-size:13px; color:var(--text-color); font-weight:700; white-space:nowrap;">{h}</th>'
+        f'font-size:13px; color:var(--text-color); font-weight:700; white-space:nowrap;'
+        f'{"width:52px; min-width:52px; max-width:52px;" if h == team_col else ""}">{h}</th>'
         for h in headers
     )
     body = ""
@@ -703,7 +704,7 @@ def html_table(rows: list[dict], color_mode: bool = False, team_col: str = "Team
         tds = ""
         for h in headers:
             val = row[h]
-            cell_style = f"padding:6px 12px; font-size:13px; white-space:nowrap; color:var(--text-color); font-weight:600;"
+            cell_style = f"padding:6px 12px; font-size:13px; white-space:nowrap; color:var(--text-color); font-weight:600;{'width:52px; min-width:52px; max-width:52px;' if h == team_col else ''}"
             if color_mode and h == team_col:
                 display = team_pill(str(val))
             else:
