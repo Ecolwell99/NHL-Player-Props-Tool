@@ -1061,9 +1061,7 @@ Live player stats pulled from the NHL play-by-play API, rebuilt from scratch eve
 
 - **Skaters** — Goals, Assists, Points, and Shots on Goal per player
 - **Goalies** — Saves (shots against minus goals allowed). Goalies only appear once they have recorded at least one save — the PBP feed has no way to identify who is in net until a shot is registered against them.
-- **Team filter** — switch between All, Away, and Home
 - **Cell flash** — a stat cell turns <span style='background:rgba(0,200,80,0.30); padding:1px 7px; border-radius:4px; font-weight:700;'>green</span> when a value increases and <span style='background:rgba(220,30,30,0.30); padding:1px 7px; border-radius:4px; font-weight:700;'>red</span> when it decreases. Flash lasts 10 seconds then clears automatically. This fires on both legitimate new stats and corrections. Applies to G, A, PTS, and SOG columns.
-- **Sort by** — dropdown next to each table header. Pick a stat column (G, A, PTS, SOG) to sort descending, or select Player to reset to alphabetical by last name.
 
 ---
 
