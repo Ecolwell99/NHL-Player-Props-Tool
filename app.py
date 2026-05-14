@@ -1083,19 +1083,6 @@ Monitors the NHL play-by-play feed for retroactive changes to player stats. Ever
 
 **Correction Log** — every individual correction event in reverse chronological order, with real-world ET timestamp, period, and a full description of what changed.
 
-Correction types detected:
-- SOG removed or re-attributed to a different shooter
-- Goalie shot-against removed or re-attributed
-- Goal removed entirely
-- Goal re-attributed to a different scorer
-- Primary or secondary assist changed
-- Faceoff winner or loser changed
-- Faceoff event removed
-
-**Status bar** — turns yellow with correction details whenever any of the above fires. Returns to green after 7 seconds if no further corrections.
-
-**Example correction card:**
-
 </div>
 """, unsafe_allow_html=True)
 
@@ -1116,6 +1103,17 @@ Correction types detected:
 
             st.markdown("""
 <div style='font-size:15px; line-height:1.7;'>
+
+Correction types detected:
+- SOG removed or re-attributed to a different shooter
+- Goalie shot-against removed or re-attributed
+- Goal removed entirely
+- Goal re-attributed to a different scorer
+- Primary or secondary assist changed
+- Faceoff winner or loser changed
+- Faceoff event removed
+
+**Status bar** — turns yellow with correction details whenever any of the above fires. Returns to green after 7 seconds if no further corrections.
 
 ---
 
