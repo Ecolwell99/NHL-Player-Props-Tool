@@ -6,11 +6,10 @@ from zoneinfo import ZoneInfo
 
 import requests
 import streamlit as st
-from streamlit_autorefresh import st_autorefresh
 
 SCOREBOARD_URL = "https://api-web.nhle.com/v1/scoreboard/now"
 PBP_URL = "https://api-web.nhle.com/v1/gamecenter/{game_id}/play-by-play"
-REFRESH_MS = 3000
+REFRESH_SECS = 3
 
 ALERT_LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nhl_alert_logs")
 
@@ -454,7 +453,6 @@ with st.sidebar:
 # --- Main ---
 
 if st.session_state.tracking:
-    st_autorefresh(interval=REFRESH_MS, key="props_refresh")
 
     tab_main, tab_log = st.tabs(["Live", "Correction Log"])
 
@@ -574,7 +572,9 @@ if st.session_state.tracking:
         except Exception as e:
             st.error(f"Refresh error: {e}")
 
+    time.sleep(REFRESH_SECS)
+    st.rerun()
+
 else:
     warning_box("STATUS: OK", "ok")
     st.info("Load live games, select one, and click Track Selected Game.")
-
