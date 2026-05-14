@@ -984,9 +984,9 @@ def render_live():
 Live player stats pulled from the NHL play-by-play API, rebuilt from scratch every 3 seconds.
 
 - **Skaters** — Goals, Assists, Points, and Shots on Goal per player
-- **Goalies** — Saves (shots against minus goals allowed)
+- **Goalies** — Saves (shots against minus goals allowed). Goalies only appear once they have recorded at least one save — the PBP feed has no way to identify who is in net until a shot is registered against them.
 - **Team filter** — switch between All, Away, and Home
-- **Cell flash** — a stat cell turns **green** when a value increases, **red** when it decreases. Flash lasts 10 seconds then clears automatically. This fires on both legitimate new stats and corrections.
+- **Cell flash** — a stat cell turns <span style='background:rgba(0,200,80,0.30); padding:1px 7px; border-radius:4px; font-weight:700;'>green</span> when a value increases and <span style='background:rgba(220,30,30,0.30); padding:1px 7px; border-radius:4px; font-weight:700;'>red</span> when it decreases. Flash lasts 10 seconds then clears automatically. This fires on both legitimate new stats and corrections.
 
 ---
 
@@ -1005,7 +1005,8 @@ Monitors the NHL play-by-play feed for retroactive changes to player stats. Ever
 
 **Aggregated Summary** — net correction impact per player for the game:
 - SOG Δ, Goals Δ, Assists Δ, FO Wins Δ, FO Loss Δ, SV Δ
-- Amber highlight = |Δ| of 1–2, Red highlight = |Δ| of 3+
+- <span style='background:rgba(255,153,0,0.20); padding:1px 7px; border-radius:4px; font-weight:700;'>Amber</span> cell = net correction of ±1 or ±2 for that stat. A moderate number of corrections that may affect a prop line.
+- <span style='background:rgba(204,34,0,0.25); padding:1px 7px; border-radius:4px; font-weight:700;'>Red</span> cell = net correction of ±3 or more. A large cumulative swing — traders should pay close attention to this player's line.
 - Only players with at least one non-zero delta are shown
 
 **Full Correction Log** — every individual correction event with timestamp, period, and description.
