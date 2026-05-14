@@ -25,16 +25,15 @@ def init_state():
         "selected_game_label": None,
         "selected_game_id": None,
         "tracking": False,
-        # snapshot dicts for correction detection
-        "prev_skater_shot_attr": {},   # event_id -> {pid, period, time_remaining}
-        "prev_goalie_shot_attr": {},   # event_id -> {pid, period, time_remaining}
-        "prev_goal_attr": {},          # event_id -> {scorer, a1, a2, period, time_remaining}
-        "prev_fo_attr": {},            # event_id -> {winner_id, loser_id, period, time_remaining}
+        "prev_skater_shot_attr": {},
+        "prev_goalie_shot_attr": {},
+        "prev_goal_attr": {},
+        "prev_fo_attr": {},
         "warning_message": "STATUS: OK",
         "warning_type": "ok",
         "alert_shown_until": 0.0,
         "alert_log": [],
-        "correction_log": [],          # persisted correction events for Tab 3
+        "correction_log": [],
         "color_mode": True,
         "active_only": True,
         "team_filter": "All",
@@ -216,20 +215,9 @@ def convert_to_time_remaining(clock_str: str, period: int | None, game_data=None
 # ---------------------------------------------------------------------------
 
 def parse_all_stats(game_data: dict) -> dict:
-    """
-    Returns a dict with keys:
-        skater_stats:       pid -> {name, team, goals, assists, points, sog}
-        goalie_stats:       pid -> {name, team, shots_against}
-        fo_stats:           pid -> {name, team, fo_taken, fo_won}
-        skater_shot_attr:   event_id -> {pid, period, time_remaining}
-        goalie_shot_attr:   event_id -> {pid, period, time_remaining}
-        goal_attr:          event_id -> {scorer, a1, a2, period, time_remaining}
-        fo_attr:            event_id -> {winner_id, loser_id, period, time_remaining}
-    """
     plays = game_data.get("plays") or []
     player_lookup = build_player_lookup(game_data)
     player_team = build_player_team_lookup(game_data)
-    goalie_set = build_goalie_set(game_data)
 
     skater_stats: dict = {}
     goalie_stats: dict = {}
@@ -359,7 +347,6 @@ def detect_corrections(parsed: dict, prev: dict, player_lookup: dict) -> list[tu
     prev_goal = prev["prev_goal_attr"]
     prev_fo = prev["prev_fo_attr"]
 
-    # Skater SOG
     for eid, attr in prev_skater_shot.items():
         if eid not in cur_skater_shot:
             alerts.append((attr["period"], f"SOG REMOVED: {pname(attr['pid'])} — P{attr['period']} {attr['time_remaining']}"))
@@ -370,7 +357,6 @@ def detect_corrections(parsed: dict, prev: dict, player_lookup: dict) -> list[tu
                 f"{pname(prev_skater_shot[eid]['pid'])} → {pname(attr['pid'])}"
             )))
 
-    # Goalie SOG (shots against)
     for eid, attr in prev_goalie_shot.items():
         if eid not in cur_goalie_shot:
             alerts.append((attr["period"], f"GOALIE SOG REMOVED: {pname(attr['pid'])} — P{attr['period']} {attr['time_remaining']}"))
@@ -381,7 +367,6 @@ def detect_corrections(parsed: dict, prev: dict, player_lookup: dict) -> list[tu
                 f"{pname(prev_goalie_shot[eid]['pid'])} → {pname(attr['pid'])}"
             )))
 
-    # Goals
     for eid, attr in prev_goal.items():
         if eid not in cur_goal:
             alerts.append((attr["period"], f"GOAL REMOVED: {pname(attr['scorer'])} — P{attr['period']} {attr['time_remaining']}"))
@@ -397,7 +382,6 @@ def detect_corrections(parsed: dict, prev: dict, player_lookup: dict) -> list[tu
         if p_attr["a2"] != attr["a2"]:
             alerts.append((p, f"SECONDARY ASSIST CHANGED: P{p} {t} — {pname(p_attr['a2'])} → {pname(attr['a2'])}"))
 
-    # Faceoffs
     for eid, attr in prev_fo.items():
         if eid not in cur_fo:
             alerts.append((attr["period"], f"FACEOFF REMOVED: P{attr['period']} {attr['time_remaining']} winner={pname(attr['winner_id'])}"))
@@ -419,16 +403,16 @@ def tally_corrections_by_player(correction_log: list) -> list[dict]:
     for entry in correction_log:
         alert_text = entry.get("Alert", "")
         player = entry.get("Player", "Unknown")
-        if "SOG REMOVED" in alert_text or "SOG RE-ATTRIBUTED" in alert_text:
-            counts[player]["SOG Corrections"] += 1
-        elif "GOALIE SOG" in alert_text:
-            counts[player]["Goalie SOG Corrections"] += 1
+        if "GOALIE SOG" in alert_text:
+            counts[player]["Goalie SOG"] += 1
+        elif "SOG REMOVED" in alert_text or "SOG RE-ATTRIBUTED" in alert_text:
+            counts[player]["SOG"] += 1
         elif "GOAL REMOVED" in alert_text or "GOAL RE-ATTRIBUTED" in alert_text:
-            counts[player]["Goal Corrections"] += 1
+            counts[player]["Goal"] += 1
         elif "ASSIST CHANGED" in alert_text:
-            counts[player]["Assist Corrections"] += 1
+            counts[player]["Assist"] += 1
         elif "FACEOFF" in alert_text:
-            counts[player]["FO Corrections"] += 1
+            counts[player]["FO"] += 1
         else:
             counts[player]["Other"] += 1
 
@@ -437,11 +421,11 @@ def tally_corrections_by_player(correction_log: list) -> list[dict]:
         total = sum(c.values())
         rows.append({
             "Player": player,
-            "SOG": c.get("SOG Corrections", 0),
-            "Goalie SOG": c.get("Goalie SOG Corrections", 0),
-            "Goal": c.get("Goal Corrections", 0),
-            "Assist": c.get("Assist Corrections", 0),
-            "FO": c.get("FO Corrections", 0),
+            "SOG": c.get("SOG", 0),
+            "Goalie SOG": c.get("Goalie SOG", 0),
+            "Goal": c.get("Goal", 0),
+            "Assist": c.get("Assist", 0),
+            "FO": c.get("FO", 0),
             "Total": total,
         })
     rows.sort(key=lambda r: -r["Total"])
@@ -543,19 +527,6 @@ def section_header(text: str):
     )
 
 
-def team_filter_buttons(away_abbrev: str, home_abbrev: str, key_prefix: str = "tf"):
-    col_away, col_home, col_all = st.columns(3)
-    with col_away:
-        if st.button(f"{away_abbrev} (Away)", use_container_width=True, key=f"{key_prefix}_away"):
-            st.session_state.team_filter = away_abbrev
-    with col_home:
-        if st.button(f"{home_abbrev} (Home)", use_container_width=True, key=f"{key_prefix}_home"):
-            st.session_state.team_filter = home_abbrev
-    with col_all:
-        if st.button("All Players", use_container_width=True, key=f"{key_prefix}_all"):
-            st.session_state.team_filter = "All"
-
-
 # ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
@@ -654,7 +625,6 @@ try:
     player_lookup = build_player_lookup(game_data)
     home_abbrev, away_abbrev = get_home_away_abbrevs(game_data)
 
-    # --- Correction detection ---
     alerts = []
     if not st.session_state.is_first_tick:
         prev_snapshot = {
@@ -698,15 +668,23 @@ try:
     active_only = st.session_state.active_only
     team_filter = st.session_state.team_filter
 
-    # Warning and team filter rendered once, above all tabs
-    warning_box(st.session_state.warning_message, st.session_state.warning_type)
-    team_filter_buttons(away_abbrev, home_abbrev, key_prefix="tf")
-
     # -----------------------------------------------------------------------
     # Tab 1: Boxscore
     # -----------------------------------------------------------------------
     with tab_box:
-        # Skaters
+        warning_box(st.session_state.warning_message, st.session_state.warning_type)
+
+        col_away, col_home, col_all = st.columns(3)
+        with col_away:
+            if st.button(f"{away_abbrev} (Away)", use_container_width=True, key="box_away"):
+                st.session_state.team_filter = away_abbrev
+        with col_home:
+            if st.button(f"{home_abbrev} (Home)", use_container_width=True, key="box_home"):
+                st.session_state.team_filter = home_abbrev
+        with col_all:
+            if st.button("All Players", use_container_width=True, key="box_all"):
+                st.session_state.team_filter = "All"
+
         section_header("Skaters — G / A / PTS / SOG")
         skater_rows = []
         for pid, s in parsed["skater_stats"].items():
@@ -728,7 +706,6 @@ try:
         else:
             st.info("No skater stats yet.")
 
-        # Goalies
         section_header("Goalies — Shots Against")
         goalie_rows = []
         for pid, g in parsed["goalie_stats"].items():
@@ -751,6 +728,19 @@ try:
     # Tab 2: Faceoffs
     # -----------------------------------------------------------------------
     with tab_fo:
+        warning_box(st.session_state.warning_message, st.session_state.warning_type)
+
+        col_away, col_home, col_all = st.columns(3)
+        with col_away:
+            if st.button(f"{away_abbrev} (Away)", use_container_width=True, key="fo_away"):
+                st.session_state.team_filter = away_abbrev
+        with col_home:
+            if st.button(f"{home_abbrev} (Home)", use_container_width=True, key="fo_home"):
+                st.session_state.team_filter = home_abbrev
+        with col_all:
+            if st.button("All Players", use_container_width=True, key="fo_all"):
+                st.session_state.team_filter = "All"
+
         section_header("Faceoffs — Taken / Won / Win%")
         fo_rows = []
         for pid, f in parsed["fo_stats"].items():
@@ -831,9 +821,11 @@ except RateLimitedError:
     st.session_state.warning_message = "⚠ RATE LIMITED — retrying next tick"
     st.session_state.warning_type = "alert"
     st.session_state.alert_shown_until = time.time() + 15
-    warning_box(st.session_state.warning_message, st.session_state.warning_type)
+    with tab_box:
+        warning_box(st.session_state.warning_message, st.session_state.warning_type)
 except Exception as e:
-    st.error(f"Refresh error: {e}")
+    with tab_box:
+        st.error(f"Refresh error: {e}")
 
 time.sleep(REFRESH_SECS)
 st.rerun()
