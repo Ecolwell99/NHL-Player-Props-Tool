@@ -779,7 +779,7 @@ if not st.session_state.tracking:
 
 @st.fragment(run_every=REFRESH_SECS)
 def render_live():
-    tab_box, tab_fo, tab_corrections = st.tabs(["Boxscore", "Faceoffs", "Stat Corrections"])
+    tab_box, tab_fo, tab_corrections, tab_info = st.tabs(["Boxscore", "Faceoffs", "Stat Corrections", "Info"])
     try:
         game_data = fetch_json(PBP_URL.format(game_id=st.session_state.selected_game_id))
         parsed = parse_all_stats(game_data)
@@ -969,6 +969,62 @@ def render_live():
             else:
                 st.info("No corrections recorded yet.")
 
+        # -----------------------------------------------------------------------
+        # Tab 4: Info
+        # -----------------------------------------------------------------------
+        with tab_info:
+            st.markdown("""
+<div style='font-size:15px; line-height:1.7;'>
+
+<div style='font-size:20px; font-weight:700; margin-bottom:4px;'>Boxscore</div>
+
+Live player stats pulled from the NHL play-by-play API, rebuilt from scratch every 3 seconds.
+
+- **Skaters** — Goals, Assists, Points, and Shots on Goal per player
+- **Goalies** — Saves (shots against minus goals allowed)
+- **Team filter** — switch between All, Away, and Home
+- **Active Players Only** — hides players with zero stats across all categories
+- **Cell flash** — a stat cell turns **green** when a value increases, **red** when it decreases. Flash lasts 10 seconds then clears automatically. This fires on both legitimate new stats and corrections.
+
+---
+
+<div style='font-size:20px; font-weight:700; margin-bottom:4px;'>Faceoffs</div>
+
+Faceoffs taken, won, and win % per player, sourced from faceoff events in the play-by-play feed.
+
+- Player IDs on faceoff events are not always populated by the NHL API mid-game — rows will appear as data becomes available
+- Same team filter applies
+
+---
+
+<div style='font-size:20px; font-weight:700; margin-bottom:4px;'>Stat Corrections</div>
+
+Monitors the NHL play-by-play feed for retroactive changes to player stats. Every tick the tool diffs the current event log against the previous tick and flags any discrepancy.
+
+**Aggregated Summary** — net correction impact per player for the game:
+- SOG Δ, Goals Δ, Assists Δ, FO Wins Δ, FO Loss Δ, SV Δ
+- Amber highlight = |Δ| of 1–2, Red highlight = |Δ| of 3+
+- Only players with at least one non-zero delta are shown
+
+**Full Correction Log** — every individual correction event with timestamp, period, and description.
+
+Correction types detected:
+- SOG removed or re-attributed to a different shooter
+- Goalie shot-against removed or re-attributed
+- Goal removed entirely
+- Goal re-attributed to a different scorer
+- Primary or secondary assist changed
+- Faceoff winner or loser changed
+- Faceoff event removed
+
+**Status bar** — turns yellow with correction details whenever any of the above fires. Returns to green after 7 seconds if no further corrections.
+
+---
+
+<div style='font-size:13px; opacity:0.5; margin-top:8px;'>Refreshes every 3 seconds · NHL play-by-play API · Dev / review tool only — do not result off this tool</div>
+
+</div>
+""", unsafe_allow_html=True)
 
     except RateLimitedError:
         st.session_state.warning_message = "⚠ RATE LIMITED — retrying next tick"
