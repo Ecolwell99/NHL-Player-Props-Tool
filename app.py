@@ -1087,6 +1087,7 @@ Monitors the NHL play-by-play feed for retroactive changes to player stats. Ever
 """, unsafe_allow_html=True)
 
             st.markdown(
+                '<div style="font-size:11px; font-weight:700; letter-spacing:0.08em; opacity:0.5; margin-bottom:4px; text-transform:uppercase;">Example</div>'
                 '<div style="padding:10px 14px; margin-bottom:6px; border-radius:8px; '
                 'background-color:var(--secondary-background-color); border-left:4px solid #ff9900; '
                 'font-size:15px; color:var(--text-color);">'
