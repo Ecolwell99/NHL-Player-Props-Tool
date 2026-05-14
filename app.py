@@ -35,6 +35,8 @@ def init_state():
         "alert_log": [],
         "correction_log": [],
         "correction_summary": {},
+        "stat_flash": {},
+        "prev_stat_totals": {},
         "color_mode": True,
         "active_only": True,
         "team_filter": "All",
@@ -472,6 +474,49 @@ def apply_deltas(deltas: list, summary: dict):
             s["last_ts"] = d["last_ts"]
 
 
+FLASH_SECS = 10
+SKATER_STAT_COLS = ("goals", "assists", "points", "sog")
+GOALIE_STAT_COLS = ("saves",)
+
+
+def diff_stat_totals(parsed: dict, prev_totals: dict, now: float) -> dict:
+    """Returns updated flash dict: {player_name: {col: {dir, ts}}}"""
+    flash = {}
+
+    for pid, s in parsed["skater_stats"].items():
+        name = s["name"]
+        prev = prev_totals.get(pid, {})
+        current = {"goals": s["goals"], "assists": s["assists"], "points": s["points"], "sog": s["sog"]}
+        for col in SKATER_STAT_COLS:
+            old_val = prev.get(col, 0)
+            new_val = current[col]
+            if new_val != old_val:
+                if name not in flash:
+                    flash[name] = {}
+                flash[name][col] = {"dir": "up" if new_val > old_val else "down", "ts": now}
+
+    for pid, g in parsed["goalie_stats"].items():
+        name = g["name"]
+        saves = g["shots_against"] - g["goals_allowed"]
+        prev = prev_totals.get(f"g_{pid}", {})
+        old_saves = prev.get("saves", 0)
+        if saves != old_saves:
+            if name not in flash:
+                flash[name] = {}
+            flash[name]["saves"] = {"dir": "up" if saves > old_saves else "down", "ts": now}
+
+    return flash
+
+
+def snapshot_stat_totals(parsed: dict) -> dict:
+    totals = {}
+    for pid, s in parsed["skater_stats"].items():
+        totals[pid] = {"goals": s["goals"], "assists": s["assists"], "points": s["points"], "sog": s["sog"]}
+    for pid, g in parsed["goalie_stats"].items():
+        totals[f"g_{pid}"] = {"saves": g["shots_against"] - g["goals_allowed"]}
+    return totals
+
+
 def build_summary_rows(summary: dict) -> list[dict]:
     rows = []
     for s in summary.values():
@@ -573,10 +618,15 @@ def team_pill(abbrev: str) -> str:
     return f'<span style="background-color:{color}; color:{text}; padding:2px 10px; border-radius:12px; font-weight:700; font-size:12px;">{abbrev}</span>'
 
 
-def html_table(rows: list[dict], color_mode: bool = False, team_col: str = "Team") -> str:
+_STAT_COL_MAP = {"G": "goals", "A": "assists", "PTS": "points", "SOG": "sog", "SV": "saves"}
+
+
+def html_table(rows: list[dict], color_mode: bool = False, team_col: str = "Team", flash: dict | None = None) -> str:
     if not rows:
         return ""
+    now = time.time()
     headers = list(rows[0].keys())
+    player_col = "Player" if "Player" in headers else ("Goalie" if "Goalie" in headers else None)
     th = "".join(
         f'<th style="padding:6px 12px; text-align:left; border-bottom:2px solid var(--secondary-background-color); '
         f'font-size:13px; color:var(--text-color); font-weight:700; white-space:nowrap;">{h}</th>'
@@ -585,17 +635,24 @@ def html_table(rows: list[dict], color_mode: bool = False, team_col: str = "Team
     body = ""
     for i, row in enumerate(rows):
         bg = "rgba(128,128,128,0.04)" if i % 2 == 0 else "rgba(128,128,128,0.12)"
+        player_name = row.get(player_col) if player_col else None
+        player_flash = (flash or {}).get(player_name, {}) if player_name else {}
         tds = ""
         for h in headers:
             val = row[h]
+            cell_style = f"padding:6px 12px; font-size:13px; white-space:nowrap; color:var(--text-color); font-weight:600;"
             if color_mode and h == team_col:
                 display = team_pill(str(val))
             else:
+                stat_key = _STAT_COL_MAP.get(h)
+                flash_entry = player_flash.get(stat_key) if stat_key else None
+                if flash_entry and (now - flash_entry["ts"]) <= FLASH_SECS:
+                    if flash_entry["dir"] == "up":
+                        cell_style += " background-color:rgba(0,200,80,0.30); border-radius:4px;"
+                    else:
+                        cell_style += " background-color:rgba(220,30,30,0.30); border-radius:4px;"
                 display = val
-            tds += (
-                f'<td style="padding:6px 12px; font-size:13px; white-space:nowrap; '
-                f'color:var(--text-color); font-weight:600;">{display}</td>'
-            )
+            tds += f'<td style="{cell_style}">{display}</td>'
         body += f'<tr style="background-color:{bg};">{tds}</tr>'
     return (
         f'<div style="overflow-x:auto; width:100%;">'
@@ -700,6 +757,8 @@ with st.sidebar:
             st.session_state.alert_log = _load_log(st.session_state.selected_game_id, "alert")
             st.session_state.correction_log = _load_log(st.session_state.selected_game_id, "corrections")
             st.session_state.correction_summary = {}
+            st.session_state.stat_flash = {}
+            st.session_state.prev_stat_totals = {}
 
     active_label = "Active Players Only: ON" if st.session_state.active_only else "Active Players Only: OFF"
     if st.button(active_label, use_container_width=True):
@@ -767,6 +826,15 @@ def render_live():
         st.session_state.prev_goalie_shot_attr = parsed["goalie_shot_attr"]
         st.session_state.prev_goal_attr = parsed["goal_attr"]
         st.session_state.prev_fo_attr = parsed["fo_attr"]
+
+        # Stat flash — diff totals and merge new flashes into session state
+        if not st.session_state.is_first_tick:
+            new_flashes = diff_stat_totals(parsed, st.session_state.prev_stat_totals, time.time())
+            for player, cols in new_flashes.items():
+                if player not in st.session_state.stat_flash:
+                    st.session_state.stat_flash[player] = {}
+                st.session_state.stat_flash[player].update(cols)
+        st.session_state.prev_stat_totals = snapshot_stat_totals(parsed)
         st.session_state.is_first_tick = False
 
         color_mode = st.session_state.color_mode
@@ -806,7 +874,7 @@ def render_live():
                 })
             skater_rows.sort(key=lambda r: r["Player"].split()[-1])
             if skater_rows:
-                st.markdown(html_table(skater_rows, color_mode), unsafe_allow_html=True)
+                st.markdown(html_table(skater_rows, color_mode, flash=st.session_state.stat_flash), unsafe_allow_html=True)
             else:
                 st.info("No skater stats yet.")
 
@@ -825,7 +893,7 @@ def render_live():
                 })
             goalie_rows.sort(key=lambda r: r["Goalie"].split()[-1])
             if goalie_rows:
-                st.markdown(html_table(goalie_rows, color_mode, team_col="Team"), unsafe_allow_html=True)
+                st.markdown(html_table(goalie_rows, color_mode, team_col="Team", flash=st.session_state.stat_flash), unsafe_allow_html=True)
             else:
                 st.info("No goalie stats yet.")
 
