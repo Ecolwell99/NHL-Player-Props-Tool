@@ -389,17 +389,21 @@ def detect_corrections(parsed: dict, prev: dict, player_lookup: dict, player_tea
     prev_goal = prev["prev_goal_attr"]
     prev_fo = prev["prev_fo_attr"]
 
+    def imp(name, stat, val):
+        sign = "+" if val > 0 else ""
+        return f"{name} {stat} {sign}{val}"
+
     # Skater SOG
     for eid, attr in prev_skater_shot.items():
         if eid not in cur_skater_shot:
             pid = attr["pid"]
-            alerts.append((attr["period"], f"SOG REMOVED: {pname(pid)} — P{attr['period']} {attr['time_remaining']}"))
+            alerts.append((attr["period"], f"SOG REMOVED: {pname(pid)} — P{attr['period']} {attr['time_remaining']}", [imp(pname(pid), "SOG", -1)]))
             ensure_delta(pid); deltas[pid]["sog"] -= 1; stamp(pid)
     for eid, attr in cur_skater_shot.items():
         if eid in prev_skater_shot and prev_skater_shot[eid]["pid"] != attr["pid"]:
             old, new = prev_skater_shot[eid]["pid"], attr["pid"]
             p, t = attr["period"], attr["time_remaining"]
-            alerts.append((p, f"SOG RE-ATTRIBUTED: P{p} {t} — {pname(old)} → {pname(new)}"))
+            alerts.append((p, f"SOG RE-ATTRIBUTED: P{p} {t} — {pname(old)} → {pname(new)}", [imp(pname(old), "SOG", -1), imp(pname(new), "SOG", +1)]))
             ensure_delta(old); deltas[old]["sog"] -= 1; stamp(old)
             ensure_delta(new); deltas[new]["sog"] += 1; stamp(new)
 
@@ -407,13 +411,13 @@ def detect_corrections(parsed: dict, prev: dict, player_lookup: dict, player_tea
     for eid, attr in prev_goalie_shot.items():
         if eid not in cur_goalie_shot:
             pid = attr["pid"]
-            alerts.append((attr["period"], f"GOALIE SOG REMOVED: {pname(pid)} — P{attr['period']} {attr['time_remaining']}"))
+            alerts.append((attr["period"], f"GOALIE SOG REMOVED: {pname(pid)} — P{attr['period']} {attr['time_remaining']}", [imp(pname(pid), "SV", -1)]))
             ensure_delta(pid); deltas[pid]["goalie_saves"] -= 1; stamp(pid)
     for eid, attr in cur_goalie_shot.items():
         if eid in prev_goalie_shot and prev_goalie_shot[eid]["pid"] != attr["pid"]:
             old, new = prev_goalie_shot[eid]["pid"], attr["pid"]
             p, t = attr["period"], attr["time_remaining"]
-            alerts.append((p, f"GOALIE SOG RE-ATTRIBUTED: P{p} {t} — {pname(old)} → {pname(new)}"))
+            alerts.append((p, f"GOALIE SOG RE-ATTRIBUTED: P{p} {t} — {pname(old)} → {pname(new)}", [imp(pname(old), "SV", -1), imp(pname(new), "SV", +1)]))
             ensure_delta(old); deltas[old]["goalie_saves"] -= 1; stamp(old)
             ensure_delta(new); deltas[new]["goalie_saves"] += 1; stamp(new)
 
@@ -421,7 +425,7 @@ def detect_corrections(parsed: dict, prev: dict, player_lookup: dict, player_tea
     for eid, attr in prev_goal.items():
         if eid not in cur_goal:
             pid = attr["scorer"]
-            alerts.append((attr["period"], f"GOAL REMOVED: {pname(pid)} — P{attr['period']} {attr['time_remaining']}"))
+            alerts.append((attr["period"], f"GOAL REMOVED: {pname(pid)} — P{attr['period']} {attr['time_remaining']}", [imp(pname(pid), "G", -1), imp(pname(pid), "SOG", -1)]))
             ensure_delta(pid); deltas[pid]["goals"] -= 1; deltas[pid]["sog"] -= 1; stamp(pid)
     for eid, attr in cur_goal.items():
         if eid not in prev_goal:
@@ -430,17 +434,23 @@ def detect_corrections(parsed: dict, prev: dict, player_lookup: dict, player_tea
         p, t = attr["period"], attr["time_remaining"]
         if p_attr["scorer"] != attr["scorer"]:
             old, new = p_attr["scorer"], attr["scorer"]
-            alerts.append((p, f"GOAL RE-ATTRIBUTED: P{p} {t} — {pname(old)} → {pname(new)}"))
+            alerts.append((p, f"GOAL RE-ATTRIBUTED: P{p} {t} — {pname(old)} → {pname(new)}", [imp(pname(old), "G", -1), imp(pname(old), "SOG", -1), imp(pname(new), "G", +1), imp(pname(new), "SOG", +1)]))
             ensure_delta(old); deltas[old]["goals"] -= 1; deltas[old]["sog"] -= 1; stamp(old)
             ensure_delta(new); deltas[new]["goals"] += 1; deltas[new]["sog"] += 1; stamp(new)
         if p_attr["a1"] != attr["a1"]:
             old, new = p_attr["a1"], attr["a1"]
-            alerts.append((p, f"PRIMARY ASSIST CHANGED: P{p} {t} — {pname(old)} → {pname(new)}"))
+            impacts = []
+            if old: impacts.append(imp(pname(old), "A", -1))
+            if new: impacts.append(imp(pname(new), "A", +1))
+            alerts.append((p, f"PRIMARY ASSIST CHANGED: P{p} {t} — {pname(old)} → {pname(new)}", impacts))
             if old: ensure_delta(old); deltas[old]["assists"] -= 1; stamp(old)
             if new: ensure_delta(new); deltas[new]["assists"] += 1; stamp(new)
         if p_attr["a2"] != attr["a2"]:
             old, new = p_attr["a2"], attr["a2"]
-            alerts.append((p, f"SECONDARY ASSIST CHANGED: P{p} {t} — {pname(old)} → {pname(new)}"))
+            impacts = []
+            if old: impacts.append(imp(pname(old), "A", -1))
+            if new: impacts.append(imp(pname(new), "A", +1))
+            alerts.append((p, f"SECONDARY ASSIST CHANGED: P{p} {t} — {pname(old)} → {pname(new)}", impacts))
             if old: ensure_delta(old); deltas[old]["assists"] -= 1; stamp(old)
             if new: ensure_delta(new); deltas[new]["assists"] += 1; stamp(new)
 
@@ -448,7 +458,10 @@ def detect_corrections(parsed: dict, prev: dict, player_lookup: dict, player_tea
     for eid, attr in prev_fo.items():
         if eid not in cur_fo:
             w, l = attr["winner_id"], attr["loser_id"]
-            alerts.append((attr["period"], f"FACEOFF REMOVED: P{attr['period']} {attr['time_remaining']} winner={pname(w)}"))
+            impacts = []
+            if w: impacts.append(imp(pname(w), "FO Wins", -1))
+            if l: impacts.append(imp(pname(l), "FO Losses", -1))
+            alerts.append((attr["period"], f"FACEOFF REMOVED: P{attr['period']} {attr['time_remaining']} winner={pname(w)}", impacts))
             if w: ensure_delta(w); deltas[w]["fo_wins"] -= 1; stamp(w)
             if l: ensure_delta(l); deltas[l]["fo_losses"] -= 1; stamp(l)
     for eid, attr in cur_fo.items():
@@ -458,12 +471,18 @@ def detect_corrections(parsed: dict, prev: dict, player_lookup: dict, player_tea
         p, t = attr["period"], attr["time_remaining"]
         if p_attr["winner_id"] != attr["winner_id"]:
             old, new = p_attr["winner_id"], attr["winner_id"]
-            alerts.append((p, f"FACEOFF WINNER CHANGED: P{p} {t} — {pname(old)} → {pname(new)}"))
+            impacts = []
+            if old: impacts += [imp(pname(old), "FO Wins", -1), imp(pname(old), "FO Losses", +1)]
+            if new: impacts += [imp(pname(new), "FO Wins", +1), imp(pname(new), "FO Losses", -1)]
+            alerts.append((p, f"FACEOFF WINNER CHANGED: P{p} {t} — {pname(old)} → {pname(new)}", impacts))
             if old: ensure_delta(old); deltas[old]["fo_wins"] -= 1; deltas[old]["fo_losses"] += 1; stamp(old)
             if new: ensure_delta(new); deltas[new]["fo_wins"] += 1; deltas[new]["fo_losses"] -= 1; stamp(new)
         if p_attr["loser_id"] != attr["loser_id"]:
             old, new = p_attr["loser_id"], attr["loser_id"]
-            alerts.append((p, f"FACEOFF LOSER CHANGED: P{p} {t} — {pname(old)} → {pname(new)}"))
+            impacts = []
+            if old: impacts.append(imp(pname(old), "FO Losses", -1))
+            if new: impacts.append(imp(pname(new), "FO Losses", +1))
+            alerts.append((p, f"FACEOFF LOSER CHANGED: P{p} {t} — {pname(old)} → {pname(new)}", impacts))
             if old: ensure_delta(old); deltas[old]["fo_losses"] -= 1; stamp(old)
             if new: ensure_delta(new); deltas[new]["fo_losses"] += 1; stamp(new)
 
@@ -809,15 +828,16 @@ def render_live():
             alerts, deltas = detect_corrections(parsed, prev_snapshot, player_lookup, player_team, now_str)
 
         if alerts:
-            msg = " | ".join(f"⚠ {a}" for _, a in alerts)
+            msg = " | ".join(f"⚠ {a}" for _, a, _ in alerts)
             st.session_state.warning_message = msg
             st.session_state.warning_type = "alert"
             st.session_state.alert_shown_until = time.time() + 7
-            for period, a in alerts:
+            for period, a, impacts in alerts:
                 entry = {
                     "Time": now_str,
                     "Period": period,
                     "Alert": a,
+                    "Impacts": impacts,
                     "Type": "alert",
                     "Player": extract_player_from_alert(a),
                 }
@@ -953,13 +973,27 @@ def render_live():
 
             if corr_log:
                 for entry in reversed(corr_log):
+                    impacts = entry.get("Impacts") or []
+                    impact_parts = []
+                    for imp_str in impacts:
+                        # color positive values green, negative red
+                        if any(c in imp_str for c in ["+1", "+2", "+3"]):
+                            color = "#00cc44"
+                        else:
+                            color = "#cc2200"
+                        impact_parts.append(f'<span style="color:{color}; font-weight:700;">{imp_str}</span>')
+                    impact_html = (
+                        f'<div style="font-size:12px; margin-top:4px; opacity:0.85;">'
+                        f'{"&nbsp;&nbsp;|&nbsp;&nbsp;".join(impact_parts)}</div>'
+                    ) if impact_parts else ""
                     st.markdown(
                         f'<div style="padding:10px 14px; margin-bottom:6px; border-radius:8px; '
                         f'background-color:var(--secondary-background-color); border-left:4px solid #ff9900; '
                         f'font-size:15px; color:var(--text-color);">'
                         f'<span style="font-weight:700; color:#ff9900;">P{entry["Period"]}</span>'
                         f'&nbsp;&nbsp;{entry["Alert"]}'
-                        f'<span style="float:right; font-size:12px; opacity:0.55;">{entry.get("Time", "")}</span></div>',
+                        f'<span style="float:right; font-size:12px; opacity:0.55;">{entry.get("Time", "")}</span>'
+                        f'{impact_html}</div>',
                         unsafe_allow_html=True,
                     )
             else:
