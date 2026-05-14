@@ -951,24 +951,17 @@ def render_live():
                     _clear_log(st.session_state.selected_game_id, "corrections")
                     st.rerun()
 
-            section_header("Aggregated Stat Corrections Summary")
-            summary_rows = build_summary_rows(st.session_state.correction_summary)
-            if summary_rows:
-                st.markdown(html_delta_table(summary_rows), unsafe_allow_html=True)
-            else:
-                st.info("No corrections detected yet.")
-
-            section_header("Full Correction Log")
             if corr_log:
-                log_rows = [
-                    {
-                        "Time": e.get("Time", ""),
-                        "Period": f"P{e['Period']}",
-                        "Alert": e["Alert"],
-                    }
-                    for e in reversed(corr_log)
-                ]
-                st.markdown(html_table(log_rows, color_mode=False), unsafe_allow_html=True)
+                for entry in reversed(corr_log):
+                    st.markdown(
+                        f'<div style="padding:10px 14px; margin-bottom:6px; border-radius:8px; '
+                        f'background-color:var(--secondary-background-color); border-left:4px solid #ff9900; '
+                        f'font-size:15px; color:var(--text-color);">'
+                        f'<span style="font-weight:700; color:#ff9900;">P{entry["Period"]}</span>'
+                        f'&nbsp;&nbsp;{entry["Alert"]}'
+                        f'<span style="float:right; font-size:12px; opacity:0.55;">{entry.get("Time", "")}</span></div>',
+                        unsafe_allow_html=True,
+                    )
             else:
                 st.info("No corrections recorded yet.")
 
@@ -1003,13 +996,7 @@ Faceoffs taken, won, and win % per player, sourced from faceoff events in the pl
 
 Monitors the NHL play-by-play feed for retroactive changes to player stats. Every tick the tool diffs the current event log against the previous tick and flags any discrepancy.
 
-**Aggregated Summary** — net correction impact per player for the game:
-- SOG Δ, Goals Δ, Assists Δ, FO Wins Δ, FO Loss Δ, SV Δ
-- <span style='background:rgba(255,153,0,0.20); padding:1px 7px; border-radius:4px; font-weight:700;'>Amber</span> cell = net correction of ±1 or ±2 for that stat. A moderate number of corrections that may affect a prop line.
-- <span style='background:rgba(204,34,0,0.25); padding:1px 7px; border-radius:4px; font-weight:700;'>Red</span> cell = net correction of ±3 or more. A large cumulative swing — traders should pay close attention to this player's line.
-- Only players with at least one non-zero delta are shown
-
-**Full Correction Log** — every individual correction event with timestamp, period, and description.
+**Correction Log** — every individual correction event in reverse chronological order, with real-world ET timestamp, period, and a full description of what changed.
 
 Correction types detected:
 - SOG removed or re-attributed to a different shooter
