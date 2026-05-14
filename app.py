@@ -38,7 +38,6 @@ def init_state():
         "stat_flash": {},
         "prev_stat_totals": {},
         "color_mode": True,
-        "active_only": True,
         "team_filter": "All",
         "is_first_tick": True,
     }
@@ -760,10 +759,6 @@ with st.sidebar:
             st.session_state.stat_flash = {}
             st.session_state.prev_stat_totals = {}
 
-    active_label = "Active Players Only: ON" if st.session_state.active_only else "Active Players Only: OFF"
-    if st.button(active_label, use_container_width=True):
-        st.session_state.active_only = not st.session_state.active_only
-
     color_label = "Color Mode: ON" if st.session_state.color_mode else "Color Mode: OFF"
     if st.button(color_label, use_container_width=True):
         st.session_state.color_mode = not st.session_state.color_mode
@@ -838,7 +833,6 @@ def render_live():
         st.session_state.is_first_tick = False
 
         color_mode = st.session_state.color_mode
-        active_only = st.session_state.active_only
         team_filter = st.session_state.team_filter
 
         # -----------------------------------------------------------------------
@@ -862,8 +856,6 @@ def render_live():
             for pid, s in parsed["skater_stats"].items():
                 if team_filter != "All" and s["team"] != team_filter:
                     continue
-                if active_only and s["goals"] == 0 and s["assists"] == 0 and s["sog"] == 0:
-                    continue
                 skater_rows.append({
                     "Player": s["name"],
                     "Team": s["team"],
@@ -882,8 +874,6 @@ def render_live():
             goalie_rows = []
             for pid, g in parsed["goalie_stats"].items():
                 if team_filter != "All" and g["team"] != team_filter:
-                    continue
-                if active_only and g["shots_against"] == 0:
                     continue
                 saves = g["shots_against"] - g["goals_allowed"]
                 goalie_rows.append({
@@ -917,8 +907,6 @@ def render_live():
             fo_rows = []
             for pid, f in parsed["fo_stats"].items():
                 if team_filter != "All" and f["team"] != team_filter:
-                    continue
-                if active_only and f["fo_taken"] == 0:
                     continue
                 win_pct = f"{round(100 * f['fo_won'] / f['fo_taken'])}%" if f["fo_taken"] > 0 else "—"
                 fo_rows.append({
@@ -983,7 +971,6 @@ Live player stats pulled from the NHL play-by-play API, rebuilt from scratch eve
 - **Skaters** — Goals, Assists, Points, and Shots on Goal per player
 - **Goalies** — Saves (shots against minus goals allowed)
 - **Team filter** — switch between All, Away, and Home
-- **Active Players Only** — hides players with zero stats across all categories
 - **Cell flash** — a stat cell turns **green** when a value increases, **red** when it decreases. Flash lasts 10 seconds then clears automatically. This fires on both legitimate new stats and corrections.
 
 ---
