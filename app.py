@@ -698,7 +698,7 @@ try:
                 "PTS": s["points"],
                 "SOG": s["sog"],
             })
-        skater_rows.sort(key=lambda r: (-r["PTS"], -r["SOG"], r["Player"]))
+        skater_rows.sort(key=lambda r: r["Player"].split()[-1])
         if skater_rows:
             st.markdown(html_table(skater_rows, color_mode), unsafe_allow_html=True)
         else:
@@ -716,7 +716,7 @@ try:
                 "Team": g["team"],
                 "SA": g["shots_against"],
             })
-        goalie_rows.sort(key=lambda r: (-r["SA"], r["Goalie"]))
+        goalie_rows.sort(key=lambda r: r["Goalie"].split()[-1])
         if goalie_rows:
             st.markdown(html_table(goalie_rows, color_mode, team_col="Team"), unsafe_allow_html=True)
         else:
@@ -753,7 +753,7 @@ try:
                 "FO Won": f["fo_won"],
                 "Win %": win_pct,
             })
-        fo_rows.sort(key=lambda r: (-r["FO Taken"], r["Player"]))
+        fo_rows.sort(key=lambda r: r["Player"].split()[-1])
         if fo_rows:
             st.markdown(html_table(fo_rows, color_mode), unsafe_allow_html=True)
         else:
