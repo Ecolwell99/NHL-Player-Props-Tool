@@ -40,6 +40,9 @@ def init_state():
         "color_mode": True,
         "team_filter": "All",
         "is_first_tick": True,
+        "sort_skaters": "Player",
+        "sort_goalies": "Goalie",
+        "sort_fo": "Player",
     }
     if st.session_state.get("_props_state_version") != STATE_VERSION:
         for key, value in defaults.items():
@@ -659,6 +662,25 @@ def team_pill(abbrev: str) -> str:
 _STAT_COL_MAP = {"G": "goals", "A": "assists", "PTS": "points", "SOG": "sog", "SV": "saves", "FO Taken": "fo_taken", "FO Won": "fo_won"}
 
 
+def sort_bar(table_id: str, columns: list[str], name_col: str = "Player"):
+    """Renders a compact sort button row. Returns the current sort column."""
+    all_cols = [name_col] + columns
+    current = st.session_state.get(f"sort_{table_id}", name_col)
+    cols = st.columns(len(all_cols))
+    for i, col in enumerate(all_cols):
+        label = f"↑ {col}" if current == col and col != name_col else col
+        if cols[i].button(label, key=f"sort_{table_id}_{col}", use_container_width=True):
+            st.session_state[f"sort_{table_id}"] = col
+            current = col
+    return current
+
+
+def apply_sort(rows: list[dict], sort_col: str, name_col: str = "Player") -> list[dict]:
+    if sort_col == name_col:
+        return sorted(rows, key=lambda r: r[name_col].split()[-1])
+    return sorted(rows, key=lambda r: (-(r[sort_col] if isinstance(r[sort_col], int) else 0), r[name_col].split()[-1]))
+
+
 def html_table(rows: list[dict], color_mode: bool = False, team_col: str = "Team", flash: dict | None = None) -> str:
     if not rows:
         return ""
@@ -891,7 +913,11 @@ def render_live():
                 if st.button(f"{home_abbrev} (Home)", use_container_width=True, key="box_home"):
                     st.session_state.team_filter = home_abbrev
 
-            section_header("Skaters — G / A / PTS / SOG")
+            hdr_col, sort_col_box = st.columns([2, 5])
+            with hdr_col:
+                section_header("Skaters — G / A / PTS / SOG")
+            with sort_col_box:
+                skater_sort = sort_bar("skaters", ["G", "A", "PTS", "SOG"])
             skater_rows = []
             for pid, s in parsed["skater_stats"].items():
                 if team_filter != "All" and s["team"] != team_filter:
@@ -904,13 +930,17 @@ def render_live():
                     "PTS": s["points"],
                     "SOG": s["sog"],
                 })
-            skater_rows.sort(key=lambda r: r["Player"].split()[-1])
+            skater_rows = apply_sort(skater_rows, skater_sort)
             if skater_rows:
                 st.markdown(html_table(skater_rows, color_mode, flash=st.session_state.stat_flash), unsafe_allow_html=True)
             else:
                 st.info("No skater stats yet.")
 
-            section_header("Goalies — Saves")
+            hdr_col_g, sort_col_g = st.columns([2, 5])
+            with hdr_col_g:
+                section_header("Goalies — Saves")
+            with sort_col_g:
+                goalie_sort = sort_bar("goalies", ["SV"], name_col="Goalie")
             goalie_rows = []
             for pid, g in parsed["goalie_stats"].items():
                 if team_filter != "All" and g["team"] != team_filter:
@@ -923,7 +953,7 @@ def render_live():
                     "Team": g["team"],
                     "SV": saves,
                 })
-            goalie_rows.sort(key=lambda r: r["Goalie"].split()[-1])
+            goalie_rows = apply_sort(goalie_rows, goalie_sort, name_col="Goalie")
             if goalie_rows:
                 st.markdown(html_table(goalie_rows, color_mode, team_col="Team", flash=st.session_state.stat_flash), unsafe_allow_html=True)
             else:
@@ -945,7 +975,11 @@ def render_live():
                 if st.button(f"{home_abbrev} (Home)", use_container_width=True, key="fo_home"):
                     st.session_state.team_filter = home_abbrev
 
-            section_header("Faceoffs — Taken / Won / Win%")
+            hdr_col_fo, sort_col_fo = st.columns([2, 5])
+            with hdr_col_fo:
+                section_header("Faceoffs — Taken / Won / Win%")
+            with sort_col_fo:
+                fo_sort = sort_bar("fo", ["FO Taken", "FO Won"])
             fo_rows = []
             for pid, f in parsed["fo_stats"].items():
                 if team_filter != "All" and f["team"] != team_filter:
@@ -958,7 +992,7 @@ def render_live():
                     "FO Won": f["fo_won"],
                     "Win %": win_pct,
                 })
-            fo_rows.sort(key=lambda r: r["Player"].split()[-1])
+            fo_rows = apply_sort(fo_rows, fo_sort)
             if fo_rows:
                 st.markdown(html_table(fo_rows, color_mode, flash=st.session_state.stat_flash), unsafe_allow_html=True)
             else:
@@ -1021,6 +1055,7 @@ Live player stats pulled from the NHL play-by-play API, rebuilt from scratch eve
 - **Goalies** — Saves (shots against minus goals allowed). Goalies only appear once they have recorded at least one save — the PBP feed has no way to identify who is in net until a shot is registered against them.
 - **Team filter** — switch between All, Away, and Home
 - **Cell flash** — a stat cell turns <span style='background:rgba(0,200,80,0.30); padding:1px 7px; border-radius:4px; font-weight:700;'>green</span> when a value increases and <span style='background:rgba(220,30,30,0.30); padding:1px 7px; border-radius:4px; font-weight:700;'>red</span> when it decreases. Flash lasts 10 seconds then clears automatically. This fires on both legitimate new stats and corrections. Applies to G, A, PTS, and SOG columns.
+- **Sort bar** — compact buttons next to each table header. Click a stat column (G, A, PTS, SOG) to sort descending; click again or click Player to reset to alphabetical by last name.
 
 ---
 
@@ -1031,6 +1066,7 @@ Faceoffs taken, won, and win % per player, sourced from faceoff events in the pl
 - Player IDs on faceoff events are not always populated by the NHL API mid-game — rows will appear as data becomes available
 - Same team filter applies
 - **Cell flash** — same <span style='background:rgba(0,200,80,0.30); padding:1px 7px; border-radius:4px; font-weight:700;'>green</span> / <span style='background:rgba(220,30,30,0.30); padding:1px 7px; border-radius:4px; font-weight:700;'>red</span> flash applies to FO Taken and FO Won columns
+- **Sort bar** — sort by FO Taken or FO Won descending, or reset to alphabetical by last name
 
 ---
 
