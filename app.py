@@ -916,7 +916,7 @@ def render_live():
                 if st.button(f"{home_abbrev} (Home)", use_container_width=True, key="box_home"):
                     st.session_state.team_filter = home_abbrev
 
-            hdr_col, sort_col_box = st.columns([2, 5])
+            hdr_col, sort_col_box = st.columns([5, 1])
             with hdr_col:
                 section_header("Skaters — G / A / PTS / SOG")
             with sort_col_box:
@@ -939,7 +939,7 @@ def render_live():
             else:
                 st.info("No skater stats yet.")
 
-            hdr_col_g, sort_col_g = st.columns([2, 5])
+            hdr_col_g, sort_col_g = st.columns([5, 1])
             with hdr_col_g:
                 section_header("Goalies — Saves")
             with sort_col_g:
@@ -978,7 +978,7 @@ def render_live():
                 if st.button(f"{home_abbrev} (Home)", use_container_width=True, key="fo_home"):
                     st.session_state.team_filter = home_abbrev
 
-            hdr_col_fo, sort_col_fo = st.columns([2, 5])
+            hdr_col_fo, sort_col_fo = st.columns([5, 1])
             with hdr_col_fo:
                 section_header("Faceoffs — Taken / Won / Win%")
             with sort_col_fo:
