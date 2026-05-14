@@ -617,6 +617,8 @@ if not st.session_state.tracking:
     st.info("Load live games, select one, and click Track Selected Game.")
     st.stop()
 
+tab_box, tab_fo, tab_corrections, tab_alerts = st.tabs(["Boxscore", "Faceoffs", "Stat Corrections", "Alert Log"])
+
 try:
     game_data = fetch_json(PBP_URL.format(game_id=st.session_state.selected_game_id))
     parsed = parse_all_stats(game_data)
@@ -665,8 +667,6 @@ try:
     color_mode = st.session_state.color_mode
     active_only = st.session_state.active_only
     team_filter = st.session_state.team_filter
-
-    tab_box, tab_fo, tab_corrections, tab_alerts = st.tabs(["Boxscore", "Faceoffs", "Stat Corrections", "Alert Log"])
 
     # -----------------------------------------------------------------------
     # Tab 1: Boxscore
@@ -819,11 +819,9 @@ except RateLimitedError:
     st.session_state.warning_message = "⚠ RATE LIMITED — retrying next tick"
     st.session_state.warning_type = "alert"
     st.session_state.alert_shown_until = time.time() + 15
-    tab_box, tab_fo, tab_corrections, tab_alerts = st.tabs(["Boxscore", "Faceoffs", "Stat Corrections", "Alert Log"])
     with tab_box:
         warning_box(st.session_state.warning_message, st.session_state.warning_type)
 except Exception as e:
-    tab_box, tab_fo, tab_corrections, tab_alerts = st.tabs(["Boxscore", "Faceoffs", "Stat Corrections", "Alert Log"])
     with tab_box:
         st.error(f"Refresh error: {e}")
 
