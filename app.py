@@ -543,16 +543,16 @@ def section_header(text: str):
     )
 
 
-def team_filter_buttons(away_abbrev: str, home_abbrev: str):
+def team_filter_buttons(away_abbrev: str, home_abbrev: str, key_prefix: str = "tf"):
     col_away, col_home, col_all = st.columns(3)
     with col_away:
-        if st.button(f"{away_abbrev} (Away)", use_container_width=True, key="tf_away"):
+        if st.button(f"{away_abbrev} (Away)", use_container_width=True, key=f"{key_prefix}_away"):
             st.session_state.team_filter = away_abbrev
     with col_home:
-        if st.button(f"{home_abbrev} (Home)", use_container_width=True, key="tf_home"):
+        if st.button(f"{home_abbrev} (Home)", use_container_width=True, key=f"{key_prefix}_home"):
             st.session_state.team_filter = home_abbrev
     with col_all:
-        if st.button("All Players", use_container_width=True, key="tf_all"):
+        if st.button("All Players", use_container_width=True, key=f"{key_prefix}_all"):
             st.session_state.team_filter = "All"
 
 
@@ -703,7 +703,7 @@ try:
     # -----------------------------------------------------------------------
     with tab_box:
         warning_box(st.session_state.warning_message, st.session_state.warning_type)
-        team_filter_buttons(away_abbrev, home_abbrev)
+        team_filter_buttons(away_abbrev, home_abbrev, key_prefix="tf_box")
 
         # Skaters
         section_header("Skaters — G / A / PTS / SOG")
@@ -751,7 +751,7 @@ try:
     # -----------------------------------------------------------------------
     with tab_fo:
         warning_box(st.session_state.warning_message, st.session_state.warning_type)
-        team_filter_buttons(away_abbrev, home_abbrev)
+        team_filter_buttons(away_abbrev, home_abbrev, key_prefix="tf_fo")
 
         section_header("Faceoffs — Taken / Won / Win%")
         fo_rows = []
