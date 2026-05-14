@@ -666,25 +666,24 @@ try:
     active_only = st.session_state.active_only
     team_filter = st.session_state.team_filter
 
-    # Warning and team filter rendered once, above all tabs
-    warning_box(st.session_state.warning_message, st.session_state.warning_type)
-    col_away, col_home, col_all = st.columns(3)
-    with col_away:
-        if st.button(f"{away_abbrev} (Away)", use_container_width=True, key="tf_away"):
-            st.session_state.team_filter = away_abbrev
-    with col_home:
-        if st.button(f"{home_abbrev} (Home)", use_container_width=True, key="tf_home"):
-            st.session_state.team_filter = home_abbrev
-    with col_all:
-        if st.button("All Players", use_container_width=True, key="tf_all"):
-            st.session_state.team_filter = "All"
-
     tab_box, tab_fo, tab_corrections, tab_alerts = st.tabs(["Boxscore", "Faceoffs", "Stat Corrections", "Alert Log"])
 
     # -----------------------------------------------------------------------
     # Tab 1: Boxscore
     # -----------------------------------------------------------------------
     with tab_box:
+        warning_box(st.session_state.warning_message, st.session_state.warning_type)
+        col_away, col_home, col_all = st.columns(3)
+        with col_away:
+            if st.button(f"{away_abbrev} (Away)", use_container_width=True, key="box_away"):
+                st.session_state.team_filter = away_abbrev
+        with col_home:
+            if st.button(f"{home_abbrev} (Home)", use_container_width=True, key="box_home"):
+                st.session_state.team_filter = home_abbrev
+        with col_all:
+            if st.button("All Players", use_container_width=True, key="box_all"):
+                st.session_state.team_filter = "All"
+
         section_header("Skaters — G / A / PTS / SOG")
         skater_rows = []
         for pid, s in parsed["skater_stats"].items():
@@ -728,6 +727,18 @@ try:
     # Tab 2: Faceoffs
     # -----------------------------------------------------------------------
     with tab_fo:
+        warning_box(st.session_state.warning_message, st.session_state.warning_type)
+        col_away, col_home, col_all = st.columns(3)
+        with col_away:
+            if st.button(f"{away_abbrev} (Away)", use_container_width=True, key="fo_away"):
+                st.session_state.team_filter = away_abbrev
+        with col_home:
+            if st.button(f"{home_abbrev} (Home)", use_container_width=True, key="fo_home"):
+                st.session_state.team_filter = home_abbrev
+        with col_all:
+            if st.button("All Players", use_container_width=True, key="fo_all"):
+                st.session_state.team_filter = "All"
+
         section_header("Faceoffs — Taken / Won / Win%")
         fo_rows = []
         for pid, f in parsed["fo_stats"].items():
@@ -808,9 +819,13 @@ except RateLimitedError:
     st.session_state.warning_message = "⚠ RATE LIMITED — retrying next tick"
     st.session_state.warning_type = "alert"
     st.session_state.alert_shown_until = time.time() + 15
-    warning_box(st.session_state.warning_message, st.session_state.warning_type)
+    tab_box, tab_fo, tab_corrections, tab_alerts = st.tabs(["Boxscore", "Faceoffs", "Stat Corrections", "Alert Log"])
+    with tab_box:
+        warning_box(st.session_state.warning_message, st.session_state.warning_type)
 except Exception as e:
-    st.error(f"Refresh error: {e}")
+    tab_box, tab_fo, tab_corrections, tab_alerts = st.tabs(["Boxscore", "Faceoffs", "Stat Corrections", "Alert Log"])
+    with tab_box:
+        st.error(f"Refresh error: {e}")
 
 time.sleep(REFRESH_SECS)
 st.rerun()
