@@ -616,11 +616,9 @@ if not st.session_state.tracking:
     warning_box("STATUS: OK", "ok")
     st.stop()
 
-tab_box, tab_fo, tab_corrections, tab_alerts = st.tabs(["Boxscore", "Faceoffs", "Stat Corrections", "Alert Log"])
-
-
 @st.fragment(run_every=REFRESH_SECS)
 def render_live():
+    tab_box, tab_fo, tab_corrections, tab_alerts = st.tabs(["Boxscore", "Faceoffs", "Stat Corrections", "Alert Log"])
     try:
         game_data = fetch_json(PBP_URL.format(game_id=st.session_state.selected_game_id))
         parsed = parse_all_stats(game_data)
