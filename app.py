@@ -720,7 +720,7 @@ if not st.session_state.tracking:
 
 @st.fragment(run_every=REFRESH_SECS)
 def render_live():
-    tab_box, tab_fo, tab_corrections, tab_alerts = st.tabs(["Boxscore", "Faceoffs", "Stat Corrections", "Alert Log"])
+    tab_box, tab_fo, tab_corrections = st.tabs(["Boxscore", "Faceoffs", "Stat Corrections"])
     try:
         game_data = fetch_json(PBP_URL.format(game_id=st.session_state.selected_game_id))
         parsed = parse_all_stats(game_data)
@@ -901,29 +901,6 @@ def render_live():
             else:
                 st.info("No corrections recorded yet.")
 
-        # -----------------------------------------------------------------------
-        # Tab 4: Alert Log
-        # -----------------------------------------------------------------------
-        with tab_alerts:
-            log = st.session_state.alert_log
-            if log:
-                if st.button("Clear Alert Log", key="clear_alerts"):
-                    st.session_state.alert_log = []
-                    _clear_log(st.session_state.selected_game_id, "alert")
-                    st.rerun()
-                for entry in reversed(log):
-                    color = "#ff9900" if entry["Type"] == "alert" else "#66ff99"
-                    st.markdown(
-                        f'<div style="padding:10px 14px; margin-bottom:6px; border-radius:8px; '
-                        f'background-color:var(--secondary-background-color); border-left:4px solid {color}; '
-                        f'font-size:15px; color:var(--text-color);">'
-                        f'<span style="font-weight:700; color:{color};">P{entry["Period"]}</span>'
-                        f'&nbsp;&nbsp;{entry["Alert"]}'
-                        f'<span style="float:right; font-size:12px; opacity:0.55;">{entry.get("Time", "")}</span></div>',
-                        unsafe_allow_html=True,
-                    )
-            else:
-                st.info("No alerts recorded yet.")
 
     except RateLimitedError:
         st.session_state.warning_message = "⚠ RATE LIMITED — retrying next tick"
