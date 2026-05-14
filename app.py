@@ -1072,9 +1072,7 @@ Live player stats pulled from the NHL play-by-play API, rebuilt from scratch eve
 Faceoffs taken, won, and win % per player, sourced from faceoff events in the play-by-play feed.
 
 - Player IDs on faceoff events are not always populated by the NHL API mid-game — rows will appear as data becomes available
-- Same team filter applies
 - **Cell flash** — same <span style='background:rgba(0,200,80,0.30); padding:1px 7px; border-radius:4px; font-weight:700;'>green</span> / <span style='background:rgba(220,30,30,0.30); padding:1px 7px; border-radius:4px; font-weight:700;'>red</span> flash applies to FO Taken and FO Won columns
-- **Sort by** — dropdown to sort by FO Taken or FO Won descending, or reset to alphabetical by last name
 
 ---
 
