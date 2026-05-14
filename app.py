@@ -506,35 +506,40 @@ def apply_deltas(deltas: list, summary: dict):
 
 
 FLASH_SECS = 10
-SKATER_STAT_COLS = ("goals", "assists", "points", "sog")
-GOALIE_STAT_COLS = ("saves",)
 
 
 def diff_stat_totals(parsed: dict, prev_totals: dict, now: float) -> dict:
-    """Returns updated flash dict: {player_name: {col: {dir, ts}}}"""
     flash = {}
+
+    def check(name, key, current, prev_snap, col):
+        old_val = prev_snap.get(col, 0)
+        if current[col] != old_val:
+            if name not in flash:
+                flash[name] = {}
+            flash[name][col] = {"dir": "up" if current[col] > old_val else "down", "ts": now}
 
     for pid, s in parsed["skater_stats"].items():
         name = s["name"]
         prev = prev_totals.get(pid, {})
-        current = {"goals": s["goals"], "assists": s["assists"], "points": s["points"], "sog": s["sog"]}
-        for col in SKATER_STAT_COLS:
-            old_val = prev.get(col, 0)
-            new_val = current[col]
-            if new_val != old_val:
-                if name not in flash:
-                    flash[name] = {}
-                flash[name][col] = {"dir": "up" if new_val > old_val else "down", "ts": now}
+        cur = {"goals": s["goals"], "assists": s["assists"], "points": s["points"], "sog": s["sog"]}
+        for col in cur:
+            check(name, pid, cur, prev, col)
 
     for pid, g in parsed["goalie_stats"].items():
         name = g["name"]
         saves = g["shots_against"] - g["goals_allowed"]
         prev = prev_totals.get(f"g_{pid}", {})
-        old_saves = prev.get("saves", 0)
-        if saves != old_saves:
+        if saves != prev.get("saves", 0):
             if name not in flash:
                 flash[name] = {}
-            flash[name]["saves"] = {"dir": "up" if saves > old_saves else "down", "ts": now}
+            flash[name]["saves"] = {"dir": "up" if saves > prev.get("saves", 0) else "down", "ts": now}
+
+    for pid, f in parsed["fo_stats"].items():
+        name = f["name"]
+        prev = prev_totals.get(f"fo_{pid}", {})
+        cur = {"fo_taken": f["fo_taken"], "fo_won": f["fo_won"]}
+        for col in cur:
+            check(name, pid, cur, prev, col)
 
     return flash
 
@@ -545,6 +550,8 @@ def snapshot_stat_totals(parsed: dict) -> dict:
         totals[pid] = {"goals": s["goals"], "assists": s["assists"], "points": s["points"], "sog": s["sog"]}
     for pid, g in parsed["goalie_stats"].items():
         totals[f"g_{pid}"] = {"saves": g["shots_against"] - g["goals_allowed"]}
+    for pid, f in parsed["fo_stats"].items():
+        totals[f"fo_{pid}"] = {"fo_taken": f["fo_taken"], "fo_won": f["fo_won"]}
     return totals
 
 
@@ -649,7 +656,7 @@ def team_pill(abbrev: str) -> str:
     return f'<span style="background-color:{color}; color:{text}; padding:2px 10px; border-radius:12px; font-weight:700; font-size:12px;">{abbrev}</span>'
 
 
-_STAT_COL_MAP = {"G": "goals", "A": "assists", "PTS": "points", "SOG": "sog", "SV": "saves"}
+_STAT_COL_MAP = {"G": "goals", "A": "assists", "PTS": "points", "SOG": "sog", "SV": "saves", "FO Taken": "fo_taken", "FO Won": "fo_won"}
 
 
 def html_table(rows: list[dict], color_mode: bool = False, team_col: str = "Team", flash: dict | None = None) -> str:
@@ -953,7 +960,7 @@ def render_live():
                 })
             fo_rows.sort(key=lambda r: r["Player"].split()[-1])
             if fo_rows:
-                st.markdown(html_table(fo_rows, color_mode), unsafe_allow_html=True)
+                st.markdown(html_table(fo_rows, color_mode, flash=st.session_state.stat_flash), unsafe_allow_html=True)
             else:
                 st.info("No faceoff data yet. Note: player IDs on faceoffs may not be populated by the API mid-game.")
 
