@@ -241,6 +241,7 @@ def parse_all_stats(game_data: dict) -> dict:
                 "name": player_lookup.get(pid, f"ID {pid}"),
                 "team": player_team.get(pid, "UNK"),
                 "shots_against": 0,
+                "goals_allowed": 0,
             }
 
     def ensure_fo(pid):
@@ -289,6 +290,7 @@ def parse_all_stats(game_data: dict) -> dict:
             if goalie:
                 ensure_goalie(goalie)
                 goalie_stats[goalie]["shots_against"] += 1
+                goalie_stats[goalie]["goals_allowed"] += 1
                 goalie_shot_attr[event_id] = {"pid": goalie, "period": period, "time_remaining": time_rem}
 
             goal_attr[event_id] = {
@@ -712,10 +714,11 @@ def render_live():
                     continue
                 if active_only and g["shots_against"] == 0:
                     continue
+                saves = g["shots_against"] - g["goals_allowed"]
                 goalie_rows.append({
                     "Goalie": g["name"],
                     "Team": g["team"],
-                    "SA": g["shots_against"],
+                    "SV": saves,
                 })
             goalie_rows.sort(key=lambda r: r["Goalie"].split()[-1])
             if goalie_rows:
