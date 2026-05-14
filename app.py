@@ -927,8 +927,8 @@ def render_live():
                 if team_filter != "All" and s["team"] != team_filter:
                     continue
                 skater_rows.append({
-                    "Player": s["name"],
                     "Team": s["team"],
+                    "Player": s["name"],
                     "G": s["goals"],
                     "A": s["assists"],
                     "PTS": s["points"],
@@ -954,8 +954,8 @@ def render_live():
                 if saves == 0:
                     continue
                 goalie_rows.append({
-                    "Goalie": g["name"],
                     "Team": g["team"],
+                    "Goalie": g["name"],
                     "SV": saves,
                 })
             goalie_rows = apply_sort(goalie_rows, goalie_sort, name_col="Goalie")
@@ -992,8 +992,8 @@ def render_live():
                     continue
                 win_pct = f"{round(100 * f['fo_won'] / f['fo_taken'])}%" if f["fo_taken"] > 0 else "—"
                 fo_rows.append({
-                    "Player": f["name"],
                     "Team": f["team"],
+                    "Player": f["name"],
                     "FO Taken": f["fo_taken"],
                     "FO Won": f["fo_won"],
                     "Win %": win_pct,
