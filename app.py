@@ -1117,6 +1117,15 @@ Correction types detected:
 
 **Status bar** — turns yellow with correction details whenever any of the above fires. Returns to green after 7 seconds if no further corrections.
 
+</div>
+""", unsafe_allow_html=True)
+
+            st.markdown('<div style="font-size:11px; font-weight:700; letter-spacing:0.08em; opacity:0.5; margin-bottom:4px; text-transform:uppercase;">Example</div>', unsafe_allow_html=True)
+            warning_box("⚠ SOG RE-ATTRIBUTED: P2 14:22 — Auston Matthews → William Nylander", "alert")
+
+            st.markdown("""
+<div style='font-size:15px; line-height:1.7;'>
+
 ---
 
 
