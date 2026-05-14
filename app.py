@@ -614,7 +614,6 @@ with st.sidebar:
 
 if not st.session_state.tracking:
     warning_box("STATUS: OK", "ok")
-    st.info("Load live games, select one, and click Track Selected Game.")
     st.stop()
 
 tab_box, tab_fo, tab_corrections, tab_alerts = st.tabs(["Boxscore", "Faceoffs", "Stat Corrections", "Alert Log"])
