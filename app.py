@@ -1094,6 +1094,29 @@ Correction types detected:
 
 **Status bar** — turns yellow with correction details whenever any of the above fires. Returns to green after 7 seconds if no further corrections.
 
+**Example correction card:**
+
+</div>
+""", unsafe_allow_html=True)
+
+            st.markdown(
+                '<div style="padding:10px 14px; margin-bottom:6px; border-radius:8px; '
+                'background-color:var(--secondary-background-color); border-left:4px solid #ff9900; '
+                'font-size:15px; color:var(--text-color);">'
+                '<span style="font-weight:700; color:#ff9900;">P2</span>'
+                '&nbsp;&nbsp;SOG RE-ATTRIBUTED: P2 14:22 — Auston Matthews → William Nylander'
+                '<span style="float:right; font-size:12px; opacity:0.55;">08:41:07 PM ET</span>'
+                '<div style="font-size:12px; margin-top:4px; opacity:0.85;">'
+                '<span style="color:#cc2200; font-weight:700;">Matthews SOG -1</span>'
+                '&nbsp;&nbsp;|&nbsp;&nbsp;'
+                '<span style="color:#00cc44; font-weight:700;">Nylander SOG +1</span>'
+                '</div></div>',
+                unsafe_allow_html=True,
+            )
+
+            st.markdown("""
+<div style='font-size:15px; line-height:1.7;'>
+
 ---
 
 <div style='font-size:13px; opacity:0.5; margin-top:8px;'>Refreshes every 3 seconds · NHL play-by-play API · Dev / review tool only — do not result off this tool</div>
