@@ -618,211 +618,214 @@ if not st.session_state.tracking:
 
 tab_box, tab_fo, tab_corrections, tab_alerts = st.tabs(["Boxscore", "Faceoffs", "Stat Corrections", "Alert Log"])
 
-try:
-    game_data = fetch_json(PBP_URL.format(game_id=st.session_state.selected_game_id))
-    parsed = parse_all_stats(game_data)
-    player_lookup = build_player_lookup(game_data)
-    home_abbrev, away_abbrev = get_home_away_abbrevs(game_data)
 
-    alerts = []
-    if not st.session_state.is_first_tick:
-        prev_snapshot = {
-            "prev_skater_shot_attr": st.session_state.prev_skater_shot_attr,
-            "prev_goalie_shot_attr": st.session_state.prev_goalie_shot_attr,
-            "prev_goal_attr": st.session_state.prev_goal_attr,
-            "prev_fo_attr": st.session_state.prev_fo_attr,
-        }
-        alerts = detect_corrections(parsed, prev_snapshot, player_lookup)
+@st.fragment(run_every=REFRESH_SECS)
+def render_live():
+    try:
+        game_data = fetch_json(PBP_URL.format(game_id=st.session_state.selected_game_id))
+        parsed = parse_all_stats(game_data)
+        player_lookup = build_player_lookup(game_data)
+        home_abbrev, away_abbrev = get_home_away_abbrevs(game_data)
 
-    now_str = datetime.now(ZoneInfo("America/New_York")).strftime("%I:%M:%S %p ET")
-
-    if alerts:
-        msg = " | ".join(f"⚠ {a}" for _, a in alerts)
-        st.session_state.warning_message = msg
-        st.session_state.warning_type = "alert"
-        st.session_state.alert_shown_until = time.time() + 7
-        for period, a in alerts:
-            entry = {
-                "Time": now_str,
-                "Period": period,
-                "Alert": a,
-                "Type": "alert",
-                "Player": extract_player_from_alert(a),
+        alerts = []
+        if not st.session_state.is_first_tick:
+            prev_snapshot = {
+                "prev_skater_shot_attr": st.session_state.prev_skater_shot_attr,
+                "prev_goalie_shot_attr": st.session_state.prev_goalie_shot_attr,
+                "prev_goal_attr": st.session_state.prev_goal_attr,
+                "prev_fo_attr": st.session_state.prev_fo_attr,
             }
-            st.session_state.alert_log.append(entry)
-            st.session_state.correction_log.append(entry)
-        _save_log(st.session_state.selected_game_id, "alert", st.session_state.alert_log)
-        _save_log(st.session_state.selected_game_id, "corrections", st.session_state.correction_log)
-    elif time.time() >= st.session_state.alert_shown_until:
-        st.session_state.warning_message = "STATUS: OK"
-        st.session_state.warning_type = "ok"
+            alerts = detect_corrections(parsed, prev_snapshot, player_lookup)
 
-    st.session_state.prev_skater_shot_attr = parsed["skater_shot_attr"]
-    st.session_state.prev_goalie_shot_attr = parsed["goalie_shot_attr"]
-    st.session_state.prev_goal_attr = parsed["goal_attr"]
-    st.session_state.prev_fo_attr = parsed["fo_attr"]
-    st.session_state.is_first_tick = False
+        now_str = datetime.now(ZoneInfo("America/New_York")).strftime("%I:%M:%S %p ET")
 
-    color_mode = st.session_state.color_mode
-    active_only = st.session_state.active_only
-    team_filter = st.session_state.team_filter
-
-    # -----------------------------------------------------------------------
-    # Tab 1: Boxscore
-    # -----------------------------------------------------------------------
-    with tab_box:
-        warning_box(st.session_state.warning_message, st.session_state.warning_type)
-        col_all, col_away, col_home = st.columns(3)
-        with col_all:
-            if st.button("All Players", use_container_width=True, key="box_all"):
-                st.session_state.team_filter = "All"
-        with col_away:
-            if st.button(f"{away_abbrev} (Away)", use_container_width=True, key="box_away"):
-                st.session_state.team_filter = away_abbrev
-        with col_home:
-            if st.button(f"{home_abbrev} (Home)", use_container_width=True, key="box_home"):
-                st.session_state.team_filter = home_abbrev
-
-        section_header("Skaters — G / A / PTS / SOG")
-        skater_rows = []
-        for pid, s in parsed["skater_stats"].items():
-            if team_filter != "All" and s["team"] != team_filter:
-                continue
-            if active_only and s["goals"] == 0 and s["assists"] == 0 and s["sog"] == 0:
-                continue
-            skater_rows.append({
-                "Player": s["name"],
-                "Team": s["team"],
-                "G": s["goals"],
-                "A": s["assists"],
-                "PTS": s["points"],
-                "SOG": s["sog"],
-            })
-        skater_rows.sort(key=lambda r: r["Player"].split()[-1])
-        if skater_rows:
-            st.markdown(html_table(skater_rows, color_mode), unsafe_allow_html=True)
-        else:
-            st.info("No skater stats yet.")
-
-        section_header("Goalies — Shots Against")
-        goalie_rows = []
-        for pid, g in parsed["goalie_stats"].items():
-            if team_filter != "All" and g["team"] != team_filter:
-                continue
-            if active_only and g["shots_against"] == 0:
-                continue
-            goalie_rows.append({
-                "Goalie": g["name"],
-                "Team": g["team"],
-                "SA": g["shots_against"],
-            })
-        goalie_rows.sort(key=lambda r: r["Goalie"].split()[-1])
-        if goalie_rows:
-            st.markdown(html_table(goalie_rows, color_mode, team_col="Team"), unsafe_allow_html=True)
-        else:
-            st.info("No goalie stats yet.")
-
-    # -----------------------------------------------------------------------
-    # Tab 2: Faceoffs
-    # -----------------------------------------------------------------------
-    with tab_fo:
-        warning_box(st.session_state.warning_message, st.session_state.warning_type)
-        col_all, col_away, col_home = st.columns(3)
-        with col_all:
-            if st.button("All Players", use_container_width=True, key="fo_all"):
-                st.session_state.team_filter = "All"
-        with col_away:
-            if st.button(f"{away_abbrev} (Away)", use_container_width=True, key="fo_away"):
-                st.session_state.team_filter = away_abbrev
-        with col_home:
-            if st.button(f"{home_abbrev} (Home)", use_container_width=True, key="fo_home"):
-                st.session_state.team_filter = home_abbrev
-
-        section_header("Faceoffs — Taken / Won / Win%")
-        fo_rows = []
-        for pid, f in parsed["fo_stats"].items():
-            if team_filter != "All" and f["team"] != team_filter:
-                continue
-            if active_only and f["fo_taken"] == 0:
-                continue
-            win_pct = f"{round(100 * f['fo_won'] / f['fo_taken'])}%" if f["fo_taken"] > 0 else "—"
-            fo_rows.append({
-                "Player": f["name"],
-                "Team": f["team"],
-                "FO Taken": f["fo_taken"],
-                "FO Won": f["fo_won"],
-                "Win %": win_pct,
-            })
-        fo_rows.sort(key=lambda r: r["Player"].split()[-1])
-        if fo_rows:
-            st.markdown(html_table(fo_rows, color_mode), unsafe_allow_html=True)
-        else:
-            st.info("No faceoff data yet. Note: player IDs on faceoffs may not be populated by the API mid-game.")
-
-    # -----------------------------------------------------------------------
-    # Tab 3: Stat Corrections
-    # -----------------------------------------------------------------------
-    with tab_corrections:
-        corr_log = st.session_state.correction_log
-
-        col_clear, _ = st.columns([1, 4])
-        with col_clear:
-            if corr_log and st.button("Clear Corrections", key="clear_corrections"):
-                st.session_state.correction_log = []
-                _clear_log(st.session_state.selected_game_id, "corrections")
-                st.rerun()
-
-        if corr_log:
-            section_header("Correction Totals by Player")
-            summary_rows = tally_corrections_by_player(corr_log)
-            st.markdown(html_table(summary_rows, color_mode=False), unsafe_allow_html=True)
-
-            section_header("Full Correction Log")
-            log_rows = [
-                {
-                    "Time": e.get("Time", ""),
-                    "Period": f"P{e['Period']}",
-                    "Alert": e["Alert"],
+        if alerts:
+            msg = " | ".join(f"⚠ {a}" for _, a in alerts)
+            st.session_state.warning_message = msg
+            st.session_state.warning_type = "alert"
+            st.session_state.alert_shown_until = time.time() + 7
+            for period, a in alerts:
+                entry = {
+                    "Time": now_str,
+                    "Period": period,
+                    "Alert": a,
+                    "Type": "alert",
+                    "Player": extract_player_from_alert(a),
                 }
-                for e in reversed(corr_log)
-            ]
-            st.markdown(html_table(log_rows, color_mode=False), unsafe_allow_html=True)
-        else:
-            st.info("No stat corrections recorded yet.")
+                st.session_state.alert_log.append(entry)
+                st.session_state.correction_log.append(entry)
+            _save_log(st.session_state.selected_game_id, "alert", st.session_state.alert_log)
+            _save_log(st.session_state.selected_game_id, "corrections", st.session_state.correction_log)
+        elif time.time() >= st.session_state.alert_shown_until:
+            st.session_state.warning_message = "STATUS: OK"
+            st.session_state.warning_type = "ok"
 
-    # -----------------------------------------------------------------------
-    # Tab 4: Alert Log
-    # -----------------------------------------------------------------------
-    with tab_alerts:
-        log = st.session_state.alert_log
-        if log:
-            if st.button("Clear Alert Log", key="clear_alerts"):
-                st.session_state.alert_log = []
-                _clear_log(st.session_state.selected_game_id, "alert")
-                st.rerun()
-            for entry in reversed(log):
-                color = "#ff9900" if entry["Type"] == "alert" else "#66ff99"
-                st.markdown(
-                    f'<div style="padding:10px 14px; margin-bottom:6px; border-radius:8px; '
-                    f'background-color:var(--secondary-background-color); border-left:4px solid {color}; '
-                    f'font-size:15px; color:var(--text-color);">'
-                    f'<span style="font-weight:700; color:{color};">P{entry["Period"]}</span>'
-                    f'&nbsp;&nbsp;{entry["Alert"]}'
-                    f'<span style="float:right; font-size:12px; opacity:0.55;">{entry.get("Time", "")}</span></div>',
-                    unsafe_allow_html=True,
-                )
-        else:
-            st.info("No alerts recorded yet.")
+        st.session_state.prev_skater_shot_attr = parsed["skater_shot_attr"]
+        st.session_state.prev_goalie_shot_attr = parsed["goalie_shot_attr"]
+        st.session_state.prev_goal_attr = parsed["goal_attr"]
+        st.session_state.prev_fo_attr = parsed["fo_attr"]
+        st.session_state.is_first_tick = False
 
-except RateLimitedError:
-    st.session_state.warning_message = "⚠ RATE LIMITED — retrying next tick"
-    st.session_state.warning_type = "alert"
-    st.session_state.alert_shown_until = time.time() + 15
-    with tab_box:
-        warning_box(st.session_state.warning_message, st.session_state.warning_type)
-except Exception as e:
-    with tab_box:
-        st.error(f"Refresh error: {e}")
+        color_mode = st.session_state.color_mode
+        active_only = st.session_state.active_only
+        team_filter = st.session_state.team_filter
 
-time.sleep(REFRESH_SECS)
-st.rerun()
+        # -----------------------------------------------------------------------
+        # Tab 1: Boxscore
+        # -----------------------------------------------------------------------
+        with tab_box:
+            warning_box(st.session_state.warning_message, st.session_state.warning_type)
+            col_all, col_away, col_home = st.columns(3)
+            with col_all:
+                if st.button("All Players", use_container_width=True, key="box_all"):
+                    st.session_state.team_filter = "All"
+            with col_away:
+                if st.button(f"{away_abbrev} (Away)", use_container_width=True, key="box_away"):
+                    st.session_state.team_filter = away_abbrev
+            with col_home:
+                if st.button(f"{home_abbrev} (Home)", use_container_width=True, key="box_home"):
+                    st.session_state.team_filter = home_abbrev
+
+            section_header("Skaters — G / A / PTS / SOG")
+            skater_rows = []
+            for pid, s in parsed["skater_stats"].items():
+                if team_filter != "All" and s["team"] != team_filter:
+                    continue
+                if active_only and s["goals"] == 0 and s["assists"] == 0 and s["sog"] == 0:
+                    continue
+                skater_rows.append({
+                    "Player": s["name"],
+                    "Team": s["team"],
+                    "G": s["goals"],
+                    "A": s["assists"],
+                    "PTS": s["points"],
+                    "SOG": s["sog"],
+                })
+            skater_rows.sort(key=lambda r: r["Player"].split()[-1])
+            if skater_rows:
+                st.markdown(html_table(skater_rows, color_mode), unsafe_allow_html=True)
+            else:
+                st.info("No skater stats yet.")
+
+            section_header("Goalies — Shots Against")
+            goalie_rows = []
+            for pid, g in parsed["goalie_stats"].items():
+                if team_filter != "All" and g["team"] != team_filter:
+                    continue
+                if active_only and g["shots_against"] == 0:
+                    continue
+                goalie_rows.append({
+                    "Goalie": g["name"],
+                    "Team": g["team"],
+                    "SA": g["shots_against"],
+                })
+            goalie_rows.sort(key=lambda r: r["Goalie"].split()[-1])
+            if goalie_rows:
+                st.markdown(html_table(goalie_rows, color_mode, team_col="Team"), unsafe_allow_html=True)
+            else:
+                st.info("No goalie stats yet.")
+
+        # -----------------------------------------------------------------------
+        # Tab 2: Faceoffs
+        # -----------------------------------------------------------------------
+        with tab_fo:
+            warning_box(st.session_state.warning_message, st.session_state.warning_type)
+            col_all, col_away, col_home = st.columns(3)
+            with col_all:
+                if st.button("All Players", use_container_width=True, key="fo_all"):
+                    st.session_state.team_filter = "All"
+            with col_away:
+                if st.button(f"{away_abbrev} (Away)", use_container_width=True, key="fo_away"):
+                    st.session_state.team_filter = away_abbrev
+            with col_home:
+                if st.button(f"{home_abbrev} (Home)", use_container_width=True, key="fo_home"):
+                    st.session_state.team_filter = home_abbrev
+
+            section_header("Faceoffs — Taken / Won / Win%")
+            fo_rows = []
+            for pid, f in parsed["fo_stats"].items():
+                if team_filter != "All" and f["team"] != team_filter:
+                    continue
+                if active_only and f["fo_taken"] == 0:
+                    continue
+                win_pct = f"{round(100 * f['fo_won'] / f['fo_taken'])}%" if f["fo_taken"] > 0 else "—"
+                fo_rows.append({
+                    "Player": f["name"],
+                    "Team": f["team"],
+                    "FO Taken": f["fo_taken"],
+                    "FO Won": f["fo_won"],
+                    "Win %": win_pct,
+                })
+            fo_rows.sort(key=lambda r: r["Player"].split()[-1])
+            if fo_rows:
+                st.markdown(html_table(fo_rows, color_mode), unsafe_allow_html=True)
+            else:
+                st.info("No faceoff data yet. Note: player IDs on faceoffs may not be populated by the API mid-game.")
+
+        # -----------------------------------------------------------------------
+        # Tab 3: Stat Corrections
+        # -----------------------------------------------------------------------
+        with tab_corrections:
+            corr_log = st.session_state.correction_log
+
+            col_clear, _ = st.columns([1, 4])
+            with col_clear:
+                if corr_log and st.button("Clear Corrections", key="clear_corrections"):
+                    st.session_state.correction_log = []
+                    _clear_log(st.session_state.selected_game_id, "corrections")
+                    st.rerun()
+
+            if corr_log:
+                section_header("Correction Totals by Player")
+                summary_rows = tally_corrections_by_player(corr_log)
+                st.markdown(html_table(summary_rows, color_mode=False), unsafe_allow_html=True)
+
+                section_header("Full Correction Log")
+                log_rows = [
+                    {
+                        "Time": e.get("Time", ""),
+                        "Period": f"P{e['Period']}",
+                        "Alert": e["Alert"],
+                    }
+                    for e in reversed(corr_log)
+                ]
+                st.markdown(html_table(log_rows, color_mode=False), unsafe_allow_html=True)
+            else:
+                st.info("No stat corrections recorded yet.")
+
+        # -----------------------------------------------------------------------
+        # Tab 4: Alert Log
+        # -----------------------------------------------------------------------
+        with tab_alerts:
+            log = st.session_state.alert_log
+            if log:
+                if st.button("Clear Alert Log", key="clear_alerts"):
+                    st.session_state.alert_log = []
+                    _clear_log(st.session_state.selected_game_id, "alert")
+                    st.rerun()
+                for entry in reversed(log):
+                    color = "#ff9900" if entry["Type"] == "alert" else "#66ff99"
+                    st.markdown(
+                        f'<div style="padding:10px 14px; margin-bottom:6px; border-radius:8px; '
+                        f'background-color:var(--secondary-background-color); border-left:4px solid {color}; '
+                        f'font-size:15px; color:var(--text-color);">'
+                        f'<span style="font-weight:700; color:{color};">P{entry["Period"]}</span>'
+                        f'&nbsp;&nbsp;{entry["Alert"]}'
+                        f'<span style="float:right; font-size:12px; opacity:0.55;">{entry.get("Time", "")}</span></div>',
+                        unsafe_allow_html=True,
+                    )
+            else:
+                st.info("No alerts recorded yet.")
+
+    except RateLimitedError:
+        st.session_state.warning_message = "⚠ RATE LIMITED — retrying next tick"
+        st.session_state.warning_type = "alert"
+        st.session_state.alert_shown_until = time.time() + 15
+        with tab_box:
+            warning_box(st.session_state.warning_message, st.session_state.warning_type)
+    except Exception as e:
+        with tab_box:
+            st.error(f"Refresh error: {e}")
+
+
+render_live()
