@@ -757,7 +757,6 @@ init_state()
 
 with st.sidebar:
     st.title("NHL Player Props")
-    st.caption("Dev / review tool only. Do not result off this tool.")
     st.divider()
 
     if st.button("Load Live Games", use_container_width=True):
@@ -1120,7 +1119,7 @@ Correction types detected:
 
 ---
 
-<div style='font-size:13px; opacity:0.5; margin-top:8px;'>Refreshes every 3 seconds · NHL play-by-play API · Dev / review tool only — do not result off this tool</div>
+
 
 </div>
 """, unsafe_allow_html=True)
