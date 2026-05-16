@@ -239,7 +239,7 @@ def parse_all_stats(game_data: dict) -> dict:
         if pid in goalie_set:
             goalie_stats[pid] = {"name": name, "team": team, "shots_against": 0, "goals_allowed": 0}
         else:
-            skater_stats[pid] = {"name": name, "team": team, "goals": 0, "assists": 0, "points": 0, "sog": 0}
+            skater_stats[pid] = {"name": name, "team": team, "goals": 0, "assists": 0, "points": 0, "sog": 0, "blocked": 0}
     skater_shot_attr: dict = {}
     goalie_shot_attr: dict = {}
     goal_attr: dict = {}
@@ -250,7 +250,7 @@ def parse_all_stats(game_data: dict) -> dict:
             skater_stats[pid] = {
                 "name": player_lookup.get(pid, f"ID {pid}"),
                 "team": player_team.get(pid, "UNK"),
-                "goals": 0, "assists": 0, "points": 0, "sog": 0,
+                "goals": 0, "assists": 0, "points": 0, "sog": 0, "blocked": 0,
             }
 
     def ensure_goalie(pid):
@@ -315,6 +315,12 @@ def parse_all_stats(game_data: dict) -> dict:
                 "scorer": scorer, "a1": a1, "a2": a2,
                 "period": period, "time_remaining": time_rem,
             }
+
+        elif play_type == "blocked-shot":
+            blocker = details.get("blockingPlayerId")
+            if blocker:
+                ensure_skater(blocker)
+                skater_stats[blocker]["blocked"] += 1
 
         elif play_type == "faceoff":
             winner_id = details.get("winningPlayerId")
@@ -524,7 +530,7 @@ def diff_stat_totals(parsed: dict, prev_totals: dict, now: float) -> dict:
     for pid, s in parsed["skater_stats"].items():
         name = s["name"]
         prev = prev_totals.get(pid, {})
-        cur = {"goals": s["goals"], "assists": s["assists"], "points": s["points"], "sog": s["sog"]}
+        cur = {"goals": s["goals"], "assists": s["assists"], "points": s["points"], "sog": s["sog"], "blocked": s["blocked"]}
         for col in cur:
             check(name, pid, cur, prev, col)
 
@@ -550,7 +556,7 @@ def diff_stat_totals(parsed: dict, prev_totals: dict, now: float) -> dict:
 def snapshot_stat_totals(parsed: dict) -> dict:
     totals = {}
     for pid, s in parsed["skater_stats"].items():
-        totals[pid] = {"goals": s["goals"], "assists": s["assists"], "points": s["points"], "sog": s["sog"]}
+        totals[pid] = {"goals": s["goals"], "assists": s["assists"], "points": s["points"], "sog": s["sog"], "blocked": s["blocked"]}
     for pid, g in parsed["goalie_stats"].items():
         totals[f"g_{pid}"] = {"saves": g["shots_against"] - g["goals_allowed"]}
     for pid, f in parsed["fo_stats"].items():
@@ -659,7 +665,7 @@ def team_pill(abbrev: str) -> str:
     return f'<span style="background-color:{color}; color:{text}; padding:2px 10px; border-radius:12px; font-weight:700; font-size:12px;">{abbrev}</span>'
 
 
-_STAT_COL_MAP = {"G": "goals", "A": "assists", "PTS": "points", "SOG": "sog", "SV": "saves", "FO Taken": "fo_taken", "FO Won": "fo_won"}
+_STAT_COL_MAP = {"G": "goals", "A": "assists", "PTS": "points", "SOG": "sog", "BS": "blocked", "SV": "saves", "FO Taken": "fo_taken", "FO Won": "fo_won"}
 
 
 def sort_bar(table_id: str, columns: list[str], name_col: str = "Player"):
@@ -921,9 +927,9 @@ def render_live():
             st.markdown("<div style='margin-top:14px;'></div>", unsafe_allow_html=True)
             hdr_col, sort_col_box = st.columns([5, 1])
             with hdr_col:
-                section_header("Skaters — G / A / PTS / SOG")
+                section_header("Skaters — G / A / PTS / SOG / BS")
             with sort_col_box:
-                skater_sort = sort_bar("skaters", ["G", "A", "PTS", "SOG"])
+                skater_sort = sort_bar("skaters", ["G", "A", "PTS", "SOG", "BS"])
             skater_rows = []
             for pid, s in parsed["skater_stats"].items():
                 if team_filter != "All" and s["team"] != team_filter:
@@ -935,6 +941,7 @@ def render_live():
                     "A": s["assists"],
                     "PTS": s["points"],
                     "SOG": s["sog"],
+                    "BS": s["blocked"],
                 })
             skater_rows = apply_sort(skater_rows, skater_sort)
             if skater_rows:
@@ -1059,9 +1066,9 @@ def render_live():
 
 Live player stats pulled from the NHL play-by-play API, rebuilt from scratch every 3 seconds.
 
-- **Skaters** — Goals, Assists, Points, and Shots on Goal per player
+- **Skaters** — Goals, Assists, Points, Shots on Goal, and Blocked Shots per player
 - **Goalies** — Saves (shots against minus goals allowed). Goalies only appear once they have recorded at least one save — the PBP feed has no way to identify who is in net until a shot is registered against them.
-- **Cell flash** — a stat cell turns <span style='background:rgba(0,200,80,0.30); padding:1px 7px; border-radius:4px; font-weight:700;'>green</span> when a value increases and <span style='background:rgba(220,30,30,0.30); padding:1px 7px; border-radius:4px; font-weight:700;'>red</span> when it decreases. Flash lasts 10 seconds then clears automatically. This fires on both legitimate new stats and corrections. Applies to G, A, PTS, and SOG columns.
+- **Cell flash** — a stat cell turns <span style='background:rgba(0,200,80,0.30); padding:1px 7px; border-radius:4px; font-weight:700;'>green</span> when a value increases and <span style='background:rgba(220,30,30,0.30); padding:1px 7px; border-radius:4px; font-weight:700;'>red</span> when it decreases. Flash lasts 10 seconds then clears automatically. This fires on both legitimate new stats and corrections. Applies to G, A, PTS, SOG, and BS columns.
 
 ---
 
