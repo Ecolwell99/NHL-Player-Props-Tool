@@ -755,6 +755,23 @@ def section_header(text: str):
     )
 
 
+def team_summary_card(team: str, stats: dict):
+    color = TEAM_COLORS.get(team, "#555555")
+    text = pill_text_color(color)
+    pill = f'<span style="background-color:{color}; color:{text}; padding:3px 12px; border-radius:12px; font-weight:700; font-size:13px; margin-right:14px;">{team}</span>'
+    stat_parts = "".join(
+        f'<span style="margin-right:16px; font-size:13px; font-weight:600;">'
+        f'<span style="opacity:0.55; font-weight:500;">{label}:</span> {val}</span>'
+        for label, val in stats.items()
+    )
+    st.markdown(
+        f'<div style="padding:10px 16px; margin-bottom:10px; border-radius:8px; '
+        f'background-color:var(--secondary-background-color); display:flex; align-items:center; flex-wrap:wrap;">'
+        f'{pill}{stat_parts}</div>',
+        unsafe_allow_html=True,
+    )
+
+
 # ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
@@ -944,6 +961,14 @@ def render_live():
                     "BS": s["blocked"],
                 })
             skater_rows = apply_sort(skater_rows, skater_sort)
+            if team_filter != "All" and skater_rows:
+                team_summary_card(team_filter, {
+                    "G": sum(r["G"] for r in skater_rows),
+                    "A": sum(r["A"] for r in skater_rows),
+                    "PTS": sum(r["PTS"] for r in skater_rows),
+                    "SOG": sum(r["SOG"] for r in skater_rows),
+                    "BS": sum(r["BS"] for r in skater_rows),
+                })
             if skater_rows:
                 st.markdown(html_table(skater_rows, color_mode, flash=st.session_state.stat_flash), unsafe_allow_html=True)
             else:
@@ -968,6 +993,10 @@ def render_live():
                     "SV": saves,
                 })
             goalie_rows = apply_sort(goalie_rows, goalie_sort, name_col="Goalie")
+            if team_filter != "All" and goalie_rows:
+                team_summary_card(team_filter, {
+                    "SV": sum(r["SV"] for r in goalie_rows),
+                })
             if goalie_rows:
                 st.markdown(html_table(goalie_rows, color_mode, team_col="Team", flash=st.session_state.stat_flash), unsafe_allow_html=True)
             else:
@@ -1008,6 +1037,15 @@ def render_live():
                     "Win %": win_pct,
                 })
             fo_rows = apply_sort(fo_rows, fo_sort)
+            if team_filter != "All" and fo_rows:
+                total_taken = sum(r["FO Taken"] for r in fo_rows)
+                total_won = sum(r["FO Won"] for r in fo_rows)
+                win_pct_total = f"{round(100 * total_won / total_taken)}%" if total_taken > 0 else "—"
+                team_summary_card(team_filter, {
+                    "FO Taken": total_taken,
+                    "FO Won": total_won,
+                    "Win %": win_pct_total,
+                })
             if fo_rows:
                 st.markdown(html_table(fo_rows, color_mode, flash=st.session_state.stat_flash), unsafe_allow_html=True)
             else:
