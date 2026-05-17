@@ -43,6 +43,7 @@ def init_state():
         "sort_skaters": "Player",
         "sort_goalies": "Goalie",
         "sort_fo": "Player",
+        "period_filter": None,
     }
     if st.session_state.get("_props_state_version") != STATE_VERSION:
         for key, value in defaults.items():
@@ -219,8 +220,18 @@ def convert_to_time_remaining(clock_str: str, period: int | None, game_data=None
 # Stat parsing
 # ---------------------------------------------------------------------------
 
-def parse_all_stats(game_data: dict) -> dict:
-    plays = game_data.get("plays") or []
+def get_played_periods(game_data: dict) -> list:
+    periods = sorted({
+        (play.get("periodDescriptor") or {}).get("number")
+        for play in (game_data.get("plays") or [])
+        if (play.get("periodDescriptor") or {}).get("number")
+    })
+    return periods
+
+
+def parse_all_stats(game_data: dict, period_filter: int | None = None) -> dict:
+    all_plays = game_data.get("plays") or []
+    plays = [p for p in all_plays if (p.get("periodDescriptor") or {}).get("number") == period_filter] if period_filter else all_plays
     player_lookup = build_player_lookup(game_data)
     player_team = build_player_team_lookup(game_data)
     goalie_set = build_goalie_set(game_data)
@@ -876,7 +887,8 @@ def render_live():
     tab_box, tab_fo, tab_corrections, tab_info = st.tabs(["Boxscore", "Faceoffs", "Stat Corrections", "Info"])
     try:
         game_data = fetch_json(PBP_URL.format(game_id=st.session_state.selected_game_id))
-        parsed = parse_all_stats(game_data)
+        played_periods = get_played_periods(game_data)
+        parsed = parse_all_stats(game_data, period_filter=st.session_state.period_filter)
         player_lookup = build_player_lookup(game_data)
         home_abbrev, away_abbrev = get_home_away_abbrevs(game_data)
 
@@ -957,7 +969,7 @@ def render_live():
                     "BS": s["blocked"],
                 })
 
-            col_all, col_away, col_home, _, sort_col_box = st.columns([2, 1, 1, 1, 2])
+            col_all, col_away, col_home, _, period_col, sort_col_box = st.columns([2, 1, 1, 1, 1, 2])
             with col_all:
                 if st.button("All Players", use_container_width=True, key="box_all"):
                     st.session_state.team_filter = "All"
@@ -967,6 +979,12 @@ def render_live():
             with col_home:
                 if st.button(home_abbrev, use_container_width=True, key="box_home"):
                     st.session_state.team_filter = home_abbrev
+            with period_col:
+                period_options = ["All"] + [f"P{p}" if p <= 3 else "OT" for p in played_periods]
+                period_labels = {None: "All", **{p: (f"P{p}" if p <= 3 else "OT") for p in played_periods}}
+                cur_label = period_labels.get(st.session_state.period_filter, "All")
+                chosen_period = st.selectbox("Period", options=period_options, index=period_options.index(cur_label), key="period_select", label_visibility="collapsed")
+                st.session_state.period_filter = None if chosen_period == "All" else played_periods[period_options.index(chosen_period) - 1]
             with sort_col_box:
                 skater_sort = sort_bar("skaters", ["G", "A", "PTS", "SOG", "BS"])
 
@@ -1088,7 +1106,7 @@ def render_live():
                     "Win %": win_pct,
                 })
 
-            col_all, col_away, col_home, _, sort_col_fo = st.columns([2, 1, 1, 1, 2])
+            col_all, col_away, col_home, _, period_col_fo, sort_col_fo = st.columns([2, 1, 1, 1, 1, 2])
             with col_all:
                 if st.button("All Players", use_container_width=True, key="fo_all"):
                     st.session_state.team_filter = "All"
@@ -1098,6 +1116,11 @@ def render_live():
             with col_home:
                 if st.button(home_abbrev, use_container_width=True, key="fo_home"):
                     st.session_state.team_filter = home_abbrev
+            with period_col_fo:
+                period_options_fo = ["All"] + [f"P{p}" if p <= 3 else "OT" for p in played_periods]
+                cur_label_fo = "All" if st.session_state.period_filter is None else (f"P{st.session_state.period_filter}" if st.session_state.period_filter <= 3 else "OT")
+                chosen_period_fo = st.selectbox("Period", options=period_options_fo, index=period_options_fo.index(cur_label_fo), key="period_select_fo", label_visibility="collapsed")
+                st.session_state.period_filter = None if chosen_period_fo == "All" else played_periods[period_options_fo.index(chosen_period_fo) - 1]
             with sort_col_fo:
                 fo_sort = sort_bar("fo", ["FO Taken", "FO Won"])
 
