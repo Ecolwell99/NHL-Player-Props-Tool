@@ -43,7 +43,6 @@ def init_state():
         "sort_skaters": "Player",
         "sort_goalies": "Goalie",
         "sort_fo": "Player",
-        "period_filter": None,
     }
     if st.session_state.get("_props_state_version") != STATE_VERSION:
         for key, value in defaults.items():
@@ -220,18 +219,8 @@ def convert_to_time_remaining(clock_str: str, period: int | None, game_data=None
 # Stat parsing
 # ---------------------------------------------------------------------------
 
-def get_played_periods(game_data: dict) -> list:
-    periods = sorted({
-        (play.get("periodDescriptor") or {}).get("number")
-        for play in (game_data.get("plays") or [])
-        if (play.get("periodDescriptor") or {}).get("number")
-    })
-    return periods
-
-
-def parse_all_stats(game_data: dict, period_filter: int | None = None) -> dict:
-    all_plays = game_data.get("plays") or []
-    plays = [p for p in all_plays if (p.get("periodDescriptor") or {}).get("number") == period_filter] if period_filter else all_plays
+def parse_all_stats(game_data: dict) -> dict:
+    plays = game_data.get("plays") or []
     player_lookup = build_player_lookup(game_data)
     player_team = build_player_team_lookup(game_data)
     goalie_set = build_goalie_set(game_data)
@@ -676,19 +665,6 @@ def team_pill(abbrev: str) -> str:
     return f'<span style="background-color:{color}; color:{text}; padding:2px 10px; border-radius:12px; font-weight:700; font-size:12px;">{abbrev}</span>'
 
 
-def team_side_header(abbrev: str, label: str):
-    color = TEAM_COLORS.get(abbrev, "#555555")
-    text = pill_text_color(color)
-    st.markdown(
-        f'<div style="margin-bottom:8px;">'
-        f'<span style="background-color:{color}; color:{text}; padding:3px 12px; border-radius:12px; '
-        f'font-weight:700; font-size:13px; margin-right:8px;">{abbrev}</span>'
-        f'<span style="font-size:13px; opacity:0.6; font-weight:500;">{label}</span>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-
-
 _STAT_COL_MAP = {"G": "goals", "A": "assists", "PTS": "points", "SOG": "sog", "BS": "blocked", "SV": "saves", "FO Taken": "fo_taken", "FO Won": "fo_won"}
 
 
@@ -782,14 +758,15 @@ def section_header(text: str):
 def team_summary_card(team: str, stats: dict):
     color = TEAM_COLORS.get(team, "#555555")
     text = pill_text_color(color)
-    pill = f'<span style="background-color:{color}; color:{text}; padding:4px 16px; border-radius:14px; font-weight:700; font-size:16px; margin-right:16px;">{team}</span>'
+    pill = f'<span style="background-color:{color}; color:{text}; padding:3px 12px; border-radius:12px; font-weight:700; font-size:13px; margin-right:14px;">{team}</span>'
     stat_parts = "".join(
-        f'<span style="margin-right:22px; font-size:22px; font-weight:700;">'
-        f'<span style="opacity:0.55; font-size:14px; font-weight:500;">{label}:</span> {val}</span>'
+        f'<span style="margin-right:16px; font-size:13px; font-weight:600;">'
+        f'<span style="opacity:0.55; font-weight:500;">{label}:</span> {val}</span>'
         for label, val in stats.items()
     )
     st.markdown(
-        f'<div style="padding:14px 0; margin-bottom:10px;">'
+        f'<div style="padding:10px 16px; margin-bottom:10px; border-radius:8px; '
+        f'background-color:var(--secondary-background-color); display:flex; align-items:center; flex-wrap:wrap;">'
         f'{pill}{stat_parts}</div>',
         unsafe_allow_html=True,
     )
@@ -887,8 +864,7 @@ def render_live():
     tab_box, tab_fo, tab_corrections, tab_info = st.tabs(["Boxscore", "Faceoffs", "Stat Corrections", "Info"])
     try:
         game_data = fetch_json(PBP_URL.format(game_id=st.session_state.selected_game_id))
-        played_periods = get_played_periods(game_data)
-        parsed = parse_all_stats(game_data, period_filter=st.session_state.period_filter)
+        parsed = parse_all_stats(game_data)
         player_lookup = build_player_lookup(game_data)
         home_abbrev, away_abbrev = get_home_away_abbrevs(game_data)
 
@@ -896,7 +872,6 @@ def render_live():
         player_team = build_player_team_lookup(game_data)
         game_state = str(game_data.get("gameState", "")).upper()
         is_live = game_state in {"LIVE", "CRIT"}
-
 
         alerts = []
         deltas = []
@@ -955,11 +930,28 @@ def render_live():
         # -----------------------------------------------------------------------
         with tab_box:
             warning_box(st.session_state.warning_message, st.session_state.warning_type)
+            col_all, col_away, col_home = st.columns(3)
+            with col_all:
+                if st.button("All Players", use_container_width=True, key="box_all"):
+                    st.session_state.team_filter = "All"
+            with col_away:
+                if st.button(f"{away_abbrev} (Away)", use_container_width=True, key="box_away"):
+                    st.session_state.team_filter = away_abbrev
+            with col_home:
+                if st.button(f"{home_abbrev} (Home)", use_container_width=True, key="box_home"):
+                    st.session_state.team_filter = home_abbrev
 
-            # Build all skater rows (no team filter applied yet)
-            all_skater_rows = []
+            st.markdown("<div style='margin-top:14px;'></div>", unsafe_allow_html=True)
+            hdr_col, sort_col_box = st.columns([5, 1])
+            with hdr_col:
+                section_header("Skaters — G / A / PTS / SOG / BS")
+            with sort_col_box:
+                skater_sort = sort_bar("skaters", ["G", "A", "PTS", "SOG", "BS"])
+            skater_rows = []
             for pid, s in parsed["skater_stats"].items():
-                all_skater_rows.append({
+                if team_filter != "All" and s["team"] != team_filter:
+                    continue
+                skater_rows.append({
                     "Team": s["team"],
                     "Player": s["name"],
                     "G": s["goals"],
@@ -968,215 +960,96 @@ def render_live():
                     "SOG": s["sog"],
                     "BS": s["blocked"],
                 })
-
-            col_all, col_away, col_home, _, period_col, sort_col_box = st.columns([2, 1, 1, 1, 1, 2])
-            with col_all:
-                if st.button("All Players", use_container_width=True, key="box_all"):
-                    st.session_state.team_filter = "All"
-            with col_away:
-                if st.button(away_abbrev, use_container_width=True, key="box_away"):
-                    st.session_state.team_filter = away_abbrev
-            with col_home:
-                if st.button(home_abbrev, use_container_width=True, key="box_home"):
-                    st.session_state.team_filter = home_abbrev
-            with period_col:
-                period_options = ["All"] + [f"P{p}" if p <= 3 else "OT" for p in played_periods]
-                period_labels = {None: "All", **{p: (f"P{p}" if p <= 3 else "OT") for p in played_periods}}
-                cur_label = period_labels.get(st.session_state.period_filter, "All")
-                chosen_period = st.selectbox("Period", options=period_options, index=period_options.index(cur_label), key="period_select", label_visibility="collapsed")
-                st.session_state.period_filter = None if chosen_period == "All" else played_periods[period_options.index(chosen_period) - 1]
-            with sort_col_box:
-                skater_sort = sort_bar("skaters", ["G", "A", "PTS", "SOG", "BS"])
-
-            st.markdown("<div style='margin-top:14px;'></div>", unsafe_allow_html=True)
-
-            if team_filter == "All":
-                away_skater_rows = apply_sort(
-                    [{k: v for k, v in r.items() if k != "Team"} for r in all_skater_rows if r["Team"] == away_abbrev],
-                    skater_sort,
-                )
-                home_skater_rows = apply_sort(
-                    [{k: v for k, v in r.items() if k != "Team"} for r in all_skater_rows if r["Team"] == home_abbrev],
-                    skater_sort,
-                )
-                col_l, col_r = st.columns(2)
-                with col_l:
-                    if away_skater_rows:
-                        team_summary_card(away_abbrev, {
-                            "G": sum(r["G"] for r in away_skater_rows),
-                            "A": sum(r["A"] for r in away_skater_rows),
-                            "PTS": sum(r["PTS"] for r in away_skater_rows),
-                            "SOG": sum(r["SOG"] for r in away_skater_rows),
-                            "BS": sum(r["BS"] for r in away_skater_rows),
-                        })
-                        st.markdown(html_table(away_skater_rows, color_mode, flash=st.session_state.stat_flash), unsafe_allow_html=True)
-                    else:
-                        st.info("No skater stats yet.")
-                with col_r:
-                    if home_skater_rows:
-                        team_summary_card(home_abbrev, {
-                            "G": sum(r["G"] for r in home_skater_rows),
-                            "A": sum(r["A"] for r in home_skater_rows),
-                            "PTS": sum(r["PTS"] for r in home_skater_rows),
-                            "SOG": sum(r["SOG"] for r in home_skater_rows),
-                            "BS": sum(r["BS"] for r in home_skater_rows),
-                        })
-                        st.markdown(html_table(home_skater_rows, color_mode, flash=st.session_state.stat_flash), unsafe_allow_html=True)
-                    else:
-                        st.info("No skater stats yet.")
+            skater_rows = apply_sort(skater_rows, skater_sort)
+            if team_filter != "All" and skater_rows:
+                team_summary_card(team_filter, {
+                    "G": sum(r["G"] for r in skater_rows),
+                    "A": sum(r["A"] for r in skater_rows),
+                    "PTS": sum(r["PTS"] for r in skater_rows),
+                    "SOG": sum(r["SOG"] for r in skater_rows),
+                    "BS": sum(r["BS"] for r in skater_rows),
+                })
+            if skater_rows:
+                st.markdown(html_table(skater_rows, color_mode, flash=st.session_state.stat_flash), unsafe_allow_html=True)
             else:
-                skater_rows = apply_sort(
-                    [r for r in all_skater_rows if r["Team"] == team_filter],
-                    skater_sort,
-                )
-                if skater_rows:
-                    team_summary_card(team_filter, {
-                        "G": sum(r["G"] for r in skater_rows),
-                        "A": sum(r["A"] for r in skater_rows),
-                        "PTS": sum(r["PTS"] for r in skater_rows),
-                        "SOG": sum(r["SOG"] for r in skater_rows),
-                        "BS": sum(r["BS"] for r in skater_rows),
-                    })
-                    st.markdown(html_table(skater_rows, color_mode, flash=st.session_state.stat_flash), unsafe_allow_html=True)
-                else:
-                    st.info("No skater stats yet.")
+                st.info("No skater stats yet.")
 
             st.markdown("<div style='margin-top:14px;'></div>", unsafe_allow_html=True)
-
-            # Build all goalie rows
-            all_goalie_rows = []
+            hdr_col_g, sort_col_g = st.columns([5, 1])
+            with hdr_col_g:
+                section_header("Goalies — Saves")
+            with sort_col_g:
+                goalie_sort = sort_bar("goalies", ["SV"], name_col="Goalie")
+            goalie_rows = []
             for pid, g in parsed["goalie_stats"].items():
+                if team_filter != "All" and g["team"] != team_filter:
+                    continue
                 saves = g["shots_against"] - g["goals_allowed"]
                 if saves == 0:
                     continue
-                all_goalie_rows.append({
+                goalie_rows.append({
                     "Team": g["team"],
                     "Goalie": g["name"],
                     "SV": saves,
                 })
-
-            if team_filter == "All":
-                away_goalie_rows = apply_sort(
-                    [{k: v for k, v in r.items() if k != "Team"} for r in all_goalie_rows if r["Team"] == away_abbrev],
-                    "Goalie", name_col="Goalie",
-                )
-                home_goalie_rows = apply_sort(
-                    [{k: v for k, v in r.items() if k != "Team"} for r in all_goalie_rows if r["Team"] == home_abbrev],
-                    "Goalie", name_col="Goalie",
-                )
-                col_l, col_r = st.columns(2)
-                with col_l:
-                    if away_goalie_rows:
-                        team_summary_card(away_abbrev, {"SV": sum(r["SV"] for r in away_goalie_rows)})
-                        st.markdown(html_table(away_goalie_rows, color_mode, flash=st.session_state.stat_flash), unsafe_allow_html=True)
-                    else:
-                        st.info("No goalie stats yet.")
-                with col_r:
-                    if home_goalie_rows:
-                        team_summary_card(home_abbrev, {"SV": sum(r["SV"] for r in home_goalie_rows)})
-                        st.markdown(html_table(home_goalie_rows, color_mode, flash=st.session_state.stat_flash), unsafe_allow_html=True)
-                    else:
-                        st.info("No goalie stats yet.")
+            goalie_rows = apply_sort(goalie_rows, goalie_sort, name_col="Goalie")
+            if team_filter != "All" and goalie_rows:
+                team_summary_card(team_filter, {
+                    "SV": sum(r["SV"] for r in goalie_rows),
+                })
+            if goalie_rows:
+                st.markdown(html_table(goalie_rows, color_mode, team_col="Team", flash=st.session_state.stat_flash), unsafe_allow_html=True)
             else:
-                goalie_rows = apply_sort(
-                    [r for r in all_goalie_rows if r["Team"] == team_filter],
-                    "Goalie", name_col="Goalie",
-                )
-                if goalie_rows:
-                    team_summary_card(team_filter, {"SV": sum(r["SV"] for r in goalie_rows)})
-                    st.markdown(html_table(goalie_rows, color_mode, team_col="Team", flash=st.session_state.stat_flash), unsafe_allow_html=True)
-                else:
-                    st.info("No goalie stats yet.")
+                st.info("No goalie stats yet.")
 
         # -----------------------------------------------------------------------
         # Tab 2: Faceoffs
         # -----------------------------------------------------------------------
         with tab_fo:
             warning_box(st.session_state.warning_message, st.session_state.warning_type)
+            col_all, col_away, col_home = st.columns(3)
+            with col_all:
+                if st.button("All Players", use_container_width=True, key="fo_all"):
+                    st.session_state.team_filter = "All"
+            with col_away:
+                if st.button(f"{away_abbrev} (Away)", use_container_width=True, key="fo_away"):
+                    st.session_state.team_filter = away_abbrev
+            with col_home:
+                if st.button(f"{home_abbrev} (Home)", use_container_width=True, key="fo_home"):
+                    st.session_state.team_filter = home_abbrev
 
-            # Build all faceoff rows
-            all_fo_rows = []
+            st.markdown("<div style='margin-top:14px;'></div>", unsafe_allow_html=True)
+            hdr_col_fo, sort_col_fo = st.columns([5, 1])
+            with hdr_col_fo:
+                section_header("Faceoffs — Taken / Won / Win%")
+            with sort_col_fo:
+                fo_sort = sort_bar("fo", ["FO Taken", "FO Won"])
+            fo_rows = []
             for pid, f in parsed["fo_stats"].items():
+                if team_filter != "All" and f["team"] != team_filter:
+                    continue
                 win_pct = f"{round(100 * f['fo_won'] / f['fo_taken'])}%" if f["fo_taken"] > 0 else "—"
-                all_fo_rows.append({
+                fo_rows.append({
                     "Team": f["team"],
                     "Player": f["name"],
                     "FO Taken": f["fo_taken"],
                     "FO Won": f["fo_won"],
                     "Win %": win_pct,
                 })
-
-            col_all, col_away, col_home, _, period_col_fo, sort_col_fo = st.columns([2, 1, 1, 1, 1, 2])
-            with col_all:
-                if st.button("All Players", use_container_width=True, key="fo_all"):
-                    st.session_state.team_filter = "All"
-            with col_away:
-                if st.button(away_abbrev, use_container_width=True, key="fo_away"):
-                    st.session_state.team_filter = away_abbrev
-            with col_home:
-                if st.button(home_abbrev, use_container_width=True, key="fo_home"):
-                    st.session_state.team_filter = home_abbrev
-            with period_col_fo:
-                period_options_fo = ["All"] + [f"P{p}" if p <= 3 else "OT" for p in played_periods]
-                cur_label_fo = "All" if st.session_state.period_filter is None else (f"P{st.session_state.period_filter}" if st.session_state.period_filter <= 3 else "OT")
-                chosen_period_fo = st.selectbox("Period", options=period_options_fo, index=period_options_fo.index(cur_label_fo), key="period_select_fo", label_visibility="collapsed")
-                st.session_state.period_filter = None if chosen_period_fo == "All" else played_periods[period_options_fo.index(chosen_period_fo) - 1]
-            with sort_col_fo:
-                fo_sort = sort_bar("fo", ["FO Taken", "FO Won"])
-
-            st.markdown("<div style='margin-top:14px;'></div>", unsafe_allow_html=True)
-
-            if team_filter == "All":
-                away_fo_rows = apply_sort(
-                    [{k: v for k, v in r.items() if k != "Team"} for r in all_fo_rows if r["Team"] == away_abbrev],
-                    fo_sort,
-                )
-                home_fo_rows = apply_sort(
-                    [{k: v for k, v in r.items() if k != "Team"} for r in all_fo_rows if r["Team"] == home_abbrev],
-                    fo_sort,
-                )
-                col_l, col_r = st.columns(2)
-                with col_l:
-                    if away_fo_rows:
-                        away_taken = sum(r["FO Taken"] for r in away_fo_rows)
-                        away_won = sum(r["FO Won"] for r in away_fo_rows)
-                        team_summary_card(away_abbrev, {
-                            "FO Taken": away_taken,
-                            "FO Won": away_won,
-                            "Win %": f"{round(100 * away_won / away_taken)}%" if away_taken > 0 else "—",
-                        })
-                        st.markdown(html_table(away_fo_rows, color_mode, flash=st.session_state.stat_flash), unsafe_allow_html=True)
-                    else:
-                        st.info("No faceoff data yet.")
-                with col_r:
-                    if home_fo_rows:
-                        home_taken = sum(r["FO Taken"] for r in home_fo_rows)
-                        home_won = sum(r["FO Won"] for r in home_fo_rows)
-                        team_summary_card(home_abbrev, {
-                            "FO Taken": home_taken,
-                            "FO Won": home_won,
-                            "Win %": f"{round(100 * home_won / home_taken)}%" if home_taken > 0 else "—",
-                        })
-                        st.markdown(html_table(home_fo_rows, color_mode, flash=st.session_state.stat_flash), unsafe_allow_html=True)
-                    else:
-                        st.info("No faceoff data yet.")
+            fo_rows = apply_sort(fo_rows, fo_sort)
+            if team_filter != "All" and fo_rows:
+                total_taken = sum(r["FO Taken"] for r in fo_rows)
+                total_won = sum(r["FO Won"] for r in fo_rows)
+                win_pct_total = f"{round(100 * total_won / total_taken)}%" if total_taken > 0 else "—"
+                team_summary_card(team_filter, {
+                    "FO Taken": total_taken,
+                    "FO Won": total_won,
+                    "Win %": win_pct_total,
+                })
+            if fo_rows:
+                st.markdown(html_table(fo_rows, color_mode, flash=st.session_state.stat_flash), unsafe_allow_html=True)
             else:
-                fo_rows = apply_sort(
-                    [r for r in all_fo_rows if r["Team"] == team_filter],
-                    fo_sort,
-                )
-                if fo_rows:
-                    total_taken = sum(r["FO Taken"] for r in fo_rows)
-                    total_won = sum(r["FO Won"] for r in fo_rows)
-                    win_pct_total = f"{round(100 * total_won / total_taken)}%" if total_taken > 0 else "—"
-                    team_summary_card(team_filter, {
-                        "FO Taken": total_taken,
-                        "FO Won": total_won,
-                        "Win %": win_pct_total,
-                    })
-                    st.markdown(html_table(fo_rows, color_mode, flash=st.session_state.stat_flash), unsafe_allow_html=True)
-                else:
-                    st.info("No faceoff data yet. Note: player IDs on faceoffs may not be populated by the API mid-game.")
+                st.info("No faceoff data yet. Note: player IDs on faceoffs may not be populated by the API mid-game.")
 
         # -----------------------------------------------------------------------
         # Tab 3: Stat Corrections
@@ -1184,13 +1057,35 @@ def render_live():
         with tab_corrections:
             corr_log = st.session_state.correction_log
 
-            col_clear, _ = st.columns([1, 4])
+            col_clear, col_download, _ = st.columns([1, 1, 3])
             with col_clear:
                 if corr_log and st.button("Clear Corrections", key="clear_corrections"):
                     st.session_state.correction_log = []
                     st.session_state.correction_summary = {}
                     _clear_log(st.session_state.selected_game_id, "corrections")
                     st.rerun()
+            with col_download:
+                if corr_log:
+                    import io, csv as _csv
+                    buf = io.StringIO()
+                    writer = _csv.DictWriter(buf, fieldnames=["Time", "Period", "Player", "Alert", "Impacts", "Type"])
+                    writer.writeheader()
+                    for entry in corr_log:
+                        writer.writerow({
+                            "Time": entry.get("Time", ""),
+                            "Period": entry.get("Period", ""),
+                            "Player": entry.get("Player", ""),
+                            "Alert": entry.get("Alert", ""),
+                            "Impacts": " | ".join(entry.get("Impacts") or []),
+                            "Type": entry.get("Type", ""),
+                        })
+                    st.download_button(
+                        "Download CSV",
+                        data=buf.getvalue(),
+                        file_name=f"nhl_stat_corrections_{st.session_state.selected_game_id}.csv",
+                        mime="text/csv",
+                        key="download_corrections",
+                    )
 
             if corr_log:
                 for entry in reversed(corr_log):
