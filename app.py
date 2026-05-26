@@ -1066,17 +1066,29 @@ def render_live():
                     st.rerun()
             with col_download:
                 if corr_log:
-                    import io, csv as _csv
+                    import io, csv as _csv, re as _re
+                    def _players_from_impacts(impacts):
+                        # Each impact string is like "Player Name STAT +1" or "Player Name STAT -1".
+                        # Strip the trailing " STAT ±N" portion to get the player name.
+                        names = []
+                        for s in (impacts or []):
+                            m = _re.match(r"^(.+?)\s+\S+\s+[+\-]\d+$", s.strip())
+                            if m:
+                                names.append(m.group(1))
+                        unique = list(dict.fromkeys(names))
+                        return unique[0] if len(unique) == 1 else ""
                     buf = io.StringIO()
+                    buf.write("﻿")  # UTF-8 BOM for Excel
                     writer = _csv.DictWriter(buf, fieldnames=["Time", "Period", "Player", "Alert", "Impacts", "Type"])
                     writer.writeheader()
                     for entry in corr_log:
+                        impacts = entry.get("Impacts") or []
                         writer.writerow({
                             "Time": entry.get("Time", ""),
                             "Period": entry.get("Period", ""),
-                            "Player": entry.get("Player", ""),
+                            "Player": _players_from_impacts(impacts),
                             "Alert": entry.get("Alert", ""),
-                            "Impacts": " | ".join(entry.get("Impacts") or []),
+                            "Impacts": " | ".join(impacts),
                             "Type": entry.get("Type", ""),
                         })
                     st.download_button(
