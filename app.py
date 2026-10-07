@@ -16,7 +16,10 @@ ALERT_LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nhl_al
 
 st.set_page_config(page_title="NHL Player Props Dev Tool", layout="wide")
 
-STATE_VERSION = 3
+STATE_VERSION = 4
+
+# Shown in place of a player name when the feed has no player id for the event.
+UNATTRIBUTED = "(unattributed)"
 
 
 def init_state():
@@ -88,6 +91,29 @@ def _clear_log(game_id: int, kind: str):
         path = _log_path(game_id, kind)
         if os.path.exists(path):
             os.remove(path)
+    except Exception:
+        pass
+
+
+def _load_summary(game_id: int) -> dict:
+    """Per-player correction totals persist as a dict, not a list."""
+    try:
+        path = _log_path(game_id, "summary")
+        if os.path.exists(path):
+            with open(path) as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+    except Exception:
+        pass
+    return {}
+
+
+def _save_summary(game_id: int, summary: dict):
+    try:
+        os.makedirs(ALERT_LOG_DIR, exist_ok=True)
+        with open(_log_path(game_id, "summary"), "w") as f:
+            json.dump(summary, f)
     except Exception:
         pass
 
@@ -368,9 +394,9 @@ def parse_all_stats(game_data: dict, period_filter: int | None = None) -> dict:
 # Correction detection
 # ---------------------------------------------------------------------------
 
-def _blank_delta(name: str, team: str) -> dict:
+def _blank_delta(name: str, team: str, pid=None) -> dict:
     return {
-        "name": name, "team": team,
+        "pid": pid, "name": name, "team": team,
         "sog": 0, "goals": 0, "assists": 0,
         "fo_wins": 0, "fo_losses": 0,
         "goalie_saves": 0,
@@ -380,20 +406,37 @@ def _blank_delta(name: str, team: str) -> dict:
 
 def detect_corrections(parsed: dict, prev: dict, player_lookup: dict, player_team: dict, now_str: str) -> tuple[list, list]:
     """Returns (alerts, deltas).
-    deltas: list of {name, team, sog, goals, assists, fo_wins, fo_losses, goalie_saves, last_ts}
+    alerts: list of (period, text, impacts, player_names)
+    deltas: list of {pid, name, team, sog, goals, assists, fo_wins, fo_losses, goalie_saves, last_ts}
     """
     alerts = []
     deltas: dict = {}
 
     def pname(pid):
-        return player_lookup.get(pid, f"ID {pid}") if pid else "None"
+        return player_lookup.get(pid, f"ID {pid}") if pid else UNATTRIBUTED
 
     def pteam(pid):
         return player_team.get(pid, "UNK") if pid else "UNK"
 
     def ensure_delta(pid):
         if pid and pid not in deltas:
-            deltas[pid] = _blank_delta(pname(pid), pteam(pid))
+            deltas[pid] = _blank_delta(pname(pid), pteam(pid), pid)
+
+    def backfill(old_pid, new_pid) -> bool:
+        """The NHL feed publishes some events with a null player id and fills it
+        in a tick or two later. That is the feed catching up, not a correction."""
+        return not old_pid and bool(new_pid)
+
+    def names(*pids):
+        """Real player names involved in an alert, in order, de-duplicated."""
+        out = []
+        for pid in pids:
+            if not pid:
+                continue
+            n = pname(pid)
+            if n not in out:
+                out.append(n)
+        return out
 
     def stamp(pid):
         if pid and pid in deltas:
@@ -417,13 +460,15 @@ def detect_corrections(parsed: dict, prev: dict, player_lookup: dict, player_tea
     for eid, attr in prev_skater_shot.items():
         if eid not in cur_skater_shot:
             pid = attr["pid"]
-            alerts.append((attr["period"], f"SOG REMOVED: {pname(pid)} — P{attr['period']} {attr['time_remaining']}", [imp(pname(pid), "SOG", -1)]))
+            alerts.append((attr["period"], f"SOG REMOVED: {pname(pid)} — P{attr['period']} {attr['time_remaining']}", [imp(pname(pid), "SOG", -1)], names(pid)))
             ensure_delta(pid); deltas[pid]["sog"] -= 1; stamp(pid)
     for eid, attr in cur_skater_shot.items():
         if eid in prev_skater_shot and prev_skater_shot[eid]["pid"] != attr["pid"]:
             old, new = prev_skater_shot[eid]["pid"], attr["pid"]
+            if backfill(old, new):
+                continue
             p, t = attr["period"], attr["time_remaining"]
-            alerts.append((p, f"SOG RE-ATTRIBUTED: P{p} {t} — {pname(old)} → {pname(new)}", [imp(pname(old), "SOG", -1), imp(pname(new), "SOG", +1)]))
+            alerts.append((p, f"SOG RE-ATTRIBUTED: P{p} {t} — {pname(old)} → {pname(new)}", [imp(pname(old), "SOG", -1), imp(pname(new), "SOG", +1)], names(old, new)))
             ensure_delta(old); deltas[old]["sog"] -= 1; stamp(old)
             ensure_delta(new); deltas[new]["sog"] += 1; stamp(new)
 
@@ -431,13 +476,15 @@ def detect_corrections(parsed: dict, prev: dict, player_lookup: dict, player_tea
     for eid, attr in prev_goalie_shot.items():
         if eid not in cur_goalie_shot:
             pid = attr["pid"]
-            alerts.append((attr["period"], f"GOALIE SOG REMOVED: {pname(pid)} — P{attr['period']} {attr['time_remaining']}", [imp(pname(pid), "SV", -1)]))
+            alerts.append((attr["period"], f"GOALIE SOG REMOVED: {pname(pid)} — P{attr['period']} {attr['time_remaining']}", [imp(pname(pid), "SV", -1)], names(pid)))
             ensure_delta(pid); deltas[pid]["goalie_saves"] -= 1; stamp(pid)
     for eid, attr in cur_goalie_shot.items():
         if eid in prev_goalie_shot and prev_goalie_shot[eid]["pid"] != attr["pid"]:
             old, new = prev_goalie_shot[eid]["pid"], attr["pid"]
+            if backfill(old, new):
+                continue
             p, t = attr["period"], attr["time_remaining"]
-            alerts.append((p, f"GOALIE SOG RE-ATTRIBUTED: P{p} {t} — {pname(old)} → {pname(new)}", [imp(pname(old), "SV", -1), imp(pname(new), "SV", +1)]))
+            alerts.append((p, f"GOALIE SOG RE-ATTRIBUTED: P{p} {t} — {pname(old)} → {pname(new)}", [imp(pname(old), "SV", -1), imp(pname(new), "SV", +1)], names(old, new)))
             ensure_delta(old); deltas[old]["goalie_saves"] -= 1; stamp(old)
             ensure_delta(new); deltas[new]["goalie_saves"] += 1; stamp(new)
 
@@ -445,32 +492,32 @@ def detect_corrections(parsed: dict, prev: dict, player_lookup: dict, player_tea
     for eid, attr in prev_goal.items():
         if eid not in cur_goal:
             pid = attr["scorer"]
-            alerts.append((attr["period"], f"GOAL REMOVED: {pname(pid)} — P{attr['period']} {attr['time_remaining']}", [imp(pname(pid), "G", -1), imp(pname(pid), "SOG", -1)]))
+            alerts.append((attr["period"], f"GOAL REMOVED: {pname(pid)} — P{attr['period']} {attr['time_remaining']}", [imp(pname(pid), "G", -1), imp(pname(pid), "SOG", -1)], names(pid)))
             ensure_delta(pid); deltas[pid]["goals"] -= 1; deltas[pid]["sog"] -= 1; stamp(pid)
     for eid, attr in cur_goal.items():
         if eid not in prev_goal:
             continue
         p_attr = prev_goal[eid]
         p, t = attr["period"], attr["time_remaining"]
-        if p_attr["scorer"] != attr["scorer"]:
+        if p_attr["scorer"] != attr["scorer"] and not backfill(p_attr["scorer"], attr["scorer"]):
             old, new = p_attr["scorer"], attr["scorer"]
-            alerts.append((p, f"GOAL RE-ATTRIBUTED: P{p} {t} — {pname(old)} → {pname(new)}", [imp(pname(old), "G", -1), imp(pname(old), "SOG", -1), imp(pname(new), "G", +1), imp(pname(new), "SOG", +1)]))
+            alerts.append((p, f"GOAL RE-ATTRIBUTED: P{p} {t} — {pname(old)} → {pname(new)}", [imp(pname(old), "G", -1), imp(pname(old), "SOG", -1), imp(pname(new), "G", +1), imp(pname(new), "SOG", +1)], names(old, new)))
             ensure_delta(old); deltas[old]["goals"] -= 1; deltas[old]["sog"] -= 1; stamp(old)
             ensure_delta(new); deltas[new]["goals"] += 1; deltas[new]["sog"] += 1; stamp(new)
-        if p_attr["a1"] != attr["a1"]:
+        if p_attr["a1"] != attr["a1"] and not backfill(p_attr["a1"], attr["a1"]):
             old, new = p_attr["a1"], attr["a1"]
             impacts = []
             if old: impacts.append(imp(pname(old), "A", -1))
             if new: impacts.append(imp(pname(new), "A", +1))
-            alerts.append((p, f"PRIMARY ASSIST CHANGED: P{p} {t} — {pname(old)} → {pname(new)}", impacts))
+            alerts.append((p, f"PRIMARY ASSIST CHANGED: P{p} {t} — {pname(old)} → {pname(new)}", impacts, names(old, new)))
             if old: ensure_delta(old); deltas[old]["assists"] -= 1; stamp(old)
             if new: ensure_delta(new); deltas[new]["assists"] += 1; stamp(new)
-        if p_attr["a2"] != attr["a2"]:
+        if p_attr["a2"] != attr["a2"] and not backfill(p_attr["a2"], attr["a2"]):
             old, new = p_attr["a2"], attr["a2"]
             impacts = []
             if old: impacts.append(imp(pname(old), "A", -1))
             if new: impacts.append(imp(pname(new), "A", +1))
-            alerts.append((p, f"SECONDARY ASSIST CHANGED: P{p} {t} — {pname(old)} → {pname(new)}", impacts))
+            alerts.append((p, f"SECONDARY ASSIST CHANGED: P{p} {t} — {pname(old)} → {pname(new)}", impacts, names(old, new)))
             if old: ensure_delta(old); deltas[old]["assists"] -= 1; stamp(old)
             if new: ensure_delta(new); deltas[new]["assists"] += 1; stamp(new)
 
@@ -481,7 +528,7 @@ def detect_corrections(parsed: dict, prev: dict, player_lookup: dict, player_tea
             impacts = []
             if w: impacts.append(imp(pname(w), "FO Wins", -1))
             if l: impacts.append(imp(pname(l), "FO Losses", -1))
-            alerts.append((attr["period"], f"FACEOFF REMOVED: P{attr['period']} {attr['time_remaining']} winner={pname(w)}", impacts))
+            alerts.append((attr["period"], f"FACEOFF REMOVED: {pname(w)} — P{attr['period']} {attr['time_remaining']}", impacts, names(w, l)))
             if w: ensure_delta(w); deltas[w]["fo_wins"] -= 1; stamp(w)
             if l: ensure_delta(l); deltas[l]["fo_losses"] -= 1; stamp(l)
     for eid, attr in cur_fo.items():
@@ -489,20 +536,20 @@ def detect_corrections(parsed: dict, prev: dict, player_lookup: dict, player_tea
             continue
         p_attr = prev_fo[eid]
         p, t = attr["period"], attr["time_remaining"]
-        if p_attr["winner_id"] != attr["winner_id"]:
+        if p_attr["winner_id"] != attr["winner_id"] and not backfill(p_attr["winner_id"], attr["winner_id"]):
             old, new = p_attr["winner_id"], attr["winner_id"]
             impacts = []
             if old: impacts += [imp(pname(old), "FO Wins", -1), imp(pname(old), "FO Losses", +1)]
             if new: impacts += [imp(pname(new), "FO Wins", +1), imp(pname(new), "FO Losses", -1)]
-            alerts.append((p, f"FACEOFF WINNER CHANGED: P{p} {t} — {pname(old)} → {pname(new)}", impacts))
+            alerts.append((p, f"FACEOFF WINNER CHANGED: P{p} {t} — {pname(old)} → {pname(new)}", impacts, names(old, new)))
             if old: ensure_delta(old); deltas[old]["fo_wins"] -= 1; deltas[old]["fo_losses"] += 1; stamp(old)
             if new: ensure_delta(new); deltas[new]["fo_wins"] += 1; deltas[new]["fo_losses"] -= 1; stamp(new)
-        if p_attr["loser_id"] != attr["loser_id"]:
+        if p_attr["loser_id"] != attr["loser_id"] and not backfill(p_attr["loser_id"], attr["loser_id"]):
             old, new = p_attr["loser_id"], attr["loser_id"]
             impacts = []
             if old: impacts.append(imp(pname(old), "FO Losses", -1))
             if new: impacts.append(imp(pname(new), "FO Losses", +1))
-            alerts.append((p, f"FACEOFF LOSER CHANGED: P{p} {t} — {pname(old)} → {pname(new)}", impacts))
+            alerts.append((p, f"FACEOFF LOSER CHANGED: P{p} {t} — {pname(old)} → {pname(new)}", impacts, names(old, new)))
             if old: ensure_delta(old); deltas[old]["fo_losses"] -= 1; stamp(old)
             if new: ensure_delta(new); deltas[new]["fo_losses"] += 1; stamp(new)
 
@@ -511,9 +558,11 @@ def detect_corrections(parsed: dict, prev: dict, player_lookup: dict, player_tea
 
 def apply_deltas(deltas: list, summary: dict):
     for d in deltas:
-        key = d["name"]
+        # Key on player id, not name — two players in one game can share a name,
+        # and the key survives a JSON round-trip through the saved summary.
+        key = str(d.get("pid") or d["name"])
         if key not in summary:
-            summary[key] = _blank_delta(d["name"], d["team"])
+            summary[key] = _blank_delta(d["name"], d["team"], d.get("pid"))
         s = summary[key]
         s["sog"] += d["sog"]
         s["goals"] += d["goals"]
@@ -578,20 +627,22 @@ def snapshot_stat_totals(parsed: dict) -> dict:
 def build_summary_rows(summary: dict) -> list[dict]:
     rows = []
     for s in summary.values():
-        if all(s[k] == 0 for k in ("sog", "goals", "assists", "fo_wins", "fo_losses", "goalie_saves")):
+        if not isinstance(s, dict):
+            continue
+        if all(s.get(k, 0) == 0 for k in ("sog", "goals", "assists", "fo_wins", "fo_losses", "goalie_saves")):
             continue
         rows.append({
-            "Player": s["name"],
-            "Team": s["team"],
-            "SOG Δ": s["sog"],
-            "Goals Δ": s["goals"],
-            "Assists Δ": s["assists"],
-            "FO Wins Δ": s["fo_wins"],
-            "FO Loss Δ": s["fo_losses"],
-            "SV Δ": s["goalie_saves"],
-            "Last": s["last_ts"],
+            "Player": s.get("name") or UNATTRIBUTED,
+            "Team": s.get("team", "UNK"),
+            "SOG Δ": s.get("sog", 0),
+            "Goals Δ": s.get("goals", 0),
+            "Assists Δ": s.get("assists", 0),
+            "FO Wins Δ": s.get("fo_wins", 0),
+            "FO Loss Δ": s.get("fo_losses", 0),
+            "SV Δ": s.get("goalie_saves", 0),
+            "Last": s.get("last_ts", ""),
         })
-    rows.sort(key=lambda r: r["Player"].split()[-1])
+    rows.sort(key=lambda r: (r["Player"].split() or [r["Player"]])[-1])
     return rows
 
 
@@ -634,16 +685,6 @@ def html_delta_table(rows: list[dict]) -> str:
         f'<tbody>{body}</tbody>'
         f'</table></div>'
     )
-
-
-def extract_player_from_alert(alert_text: str) -> str:
-    for sep in (":", "—"):
-        if sep in alert_text:
-            after = alert_text.split(sep, 1)[1].strip()
-            name_part = after.split("—")[0].split("→")[0].strip()
-            if name_part:
-                return name_part
-    return "Unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -865,7 +906,7 @@ with st.sidebar:
             st.session_state.alert_shown_until = 0.0
             st.session_state.alert_log = _load_log(st.session_state.selected_game_id, "alert")
             st.session_state.correction_log = _load_log(st.session_state.selected_game_id, "corrections")
-            st.session_state.correction_summary = {}
+            st.session_state.correction_summary = _load_summary(st.session_state.selected_game_id)
             st.session_state.stat_flash = {}
             st.session_state.prev_stat_totals = {}
 
@@ -910,24 +951,25 @@ def render_live():
             alerts, deltas = detect_corrections(parsed, prev_snapshot, player_lookup, player_team, now_str)
 
         if alerts:
-            msg = " | ".join(f"⚠ {a}" for _, a, _ in alerts)
+            msg = " | ".join(f"⚠ {a}" for _, a, _, _ in alerts)
             st.session_state.warning_message = msg
             st.session_state.warning_type = "alert"
             st.session_state.alert_shown_until = time.time() + 7
-            for period, a, impacts in alerts:
+            for period, a, impacts, players in alerts:
                 entry = {
                     "Time": now_str,
                     "Period": period,
                     "Alert": a,
                     "Impacts": impacts,
                     "Type": "alert",
-                    "Player": extract_player_from_alert(a),
+                    "Player": ", ".join(players) if players else UNATTRIBUTED,
                 }
                 st.session_state.alert_log.append(entry)
                 st.session_state.correction_log.append(entry)
             apply_deltas(deltas, st.session_state.correction_summary)
             _save_log(st.session_state.selected_game_id, "alert", st.session_state.alert_log)
             _save_log(st.session_state.selected_game_id, "corrections", st.session_state.correction_log)
+            _save_summary(st.session_state.selected_game_id, st.session_state.correction_summary)
         elif time.time() >= st.session_state.alert_shown_until:
             st.session_state.warning_message = "STATUS: OK"
             st.session_state.warning_type = "ok"
@@ -1190,19 +1232,21 @@ def render_live():
                     st.session_state.correction_log = []
                     st.session_state.correction_summary = {}
                     _clear_log(st.session_state.selected_game_id, "corrections")
+                    _clear_log(st.session_state.selected_game_id, "summary")
                     st.rerun()
             with col_download:
                 if corr_log:
                     import io, csv as _csv
                     buf = io.StringIO()
                     buf.write("﻿")  # UTF-8 BOM for Excel
-                    writer = _csv.DictWriter(buf, fieldnames=["Time", "Period", "Alert", "Impacts", "Type"])
+                    writer = _csv.DictWriter(buf, fieldnames=["Time", "Period", "Player", "Alert", "Impacts", "Type"])
                     writer.writeheader()
                     for entry in corr_log:
                         impacts = entry.get("Impacts") or []
                         writer.writerow({
                             "Time": entry.get("Time", ""),
                             "Period": entry.get("Period", ""),
+                            "Player": entry.get("Player", ""),
                             "Alert": entry.get("Alert", ""),
                             "Impacts": " | ".join(impacts),
                             "Type": entry.get("Type", ""),
@@ -1214,6 +1258,12 @@ def render_live():
                         mime="text/csv",
                         key="download_corrections",
                     )
+
+            summary_rows = build_summary_rows(st.session_state.correction_summary)
+            if summary_rows:
+                section_header("Players Affected")
+                st.markdown(html_delta_table(summary_rows), unsafe_allow_html=True)
+                st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
 
             if corr_log:
                 for entry in reversed(corr_log):
@@ -1273,7 +1323,11 @@ Faceoffs taken, won, and win % per player, sourced from faceoff events in the pl
 
 Monitors the NHL play-by-play feed for retroactive changes to player stats. Every tick the tool diffs the current event log against the previous tick and flags any discrepancy.
 
+**Players Affected** — running net stat change per player for this game, keyed on player ID. Persists across a restart and clears with the Clear Corrections button.
+
 **Correction Log** — every individual correction event in reverse chronological order, with real-world ET timestamp, period, and a full description of what changed.
+
+**Feed backfill is not a correction** — the NHL feed sometimes publishes an event with a null player ID and fills it in a tick or two later, most often on faceoffs. A null → player transition is treated as the feed catching up and is not logged. Only a real player → different player change, or an event disappearing, counts as a correction. Where the feed genuinely has no player ID, the name shows as <strong>(unattributed)</strong>.
 
 </div>
 """, unsafe_allow_html=True)
